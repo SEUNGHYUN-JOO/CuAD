@@ -1,12 +1,12 @@
-# cuad — source-to-source automatic differentiation for CUDA
+# CuAD — source-to-source automatic differentiation for CUDA
 
-**cuad** reads CUDA kernels and writes their derivatives as new CUDA source, in the
+**CuAD** (CUDA Automatic Differentiation) reads CUDA kernels and writes their derivatives as new CUDA source, in the
 style of Tapenade: a **forward (tangent)** companion `f_d` and a **reverse (adjoint)**
 companion `f_b` for each `__global__` / `__device__` function. It is built on
 Clang LibTooling and differentiates the kernel math directly, so the derivatives are
 exact (no finite differences) and the generated code runs on the GPU like the original.
 
-cuad was developed for the exact discrete adjoint of the
+CuAD was developed for the exact discrete adjoint of the
 [CuDAFLOW](https://github.com/SEUNGHYUN-JOO/CuDAFlow) GPU RANS/LES solver, where it
 differentiates the flux, viscous and turbulence-model residual kernels.
 
@@ -75,7 +75,7 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   value it takes.
 - Not supported: lambdas, `while` / `for (;;)` loops with `break`, and straight-line
   in-place updates of a local-array element that an earlier statement also reads.
-- **cuad does not yet stop on unsupported constructs.** Some are marked with a
+- **CuAD does not yet stop on unsupported constructs.** Some are marked with a
   `// TODO(cuad)` comment in the generated code, others are passed through without a
   warning. Always verify generated derivatives (finite differences or a dot-product
   test, as in `test/`) before using them.
@@ -93,6 +93,8 @@ sudo apt-get install -y libclang-14-dev llvm-14-dev
 (default `/usr/lib/llvm-14`).
 
 ## Usage
+
+The command-line tool is `cuad`:
 
 ```bash
 ./cuad    kernel.cu [function] > kernel_d.cuh   # forward (tangent) mode
