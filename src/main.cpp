@@ -105,19 +105,24 @@ public:
 int main(int argc, char **argv) {
   std::string file;
   std::vector<std::string> positional;
+  bool allowUnsupported = false;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (a == "-r" || a == "--reverse")
       gReverse = true;
     else if (a == "-f" || a == "--forward")
       gReverse = false;
+    else if (a == "--allow-unsupported")
+      allowUnsupported = true;
     else
       positional.push_back(a);
   }
   if (positional.empty()) {
-    std::cerr << "usage: cuad [-r|--reverse] <file.cu> [functionName]\n"
-              << "  -r/--reverse : emit reverse/adjoint mode (default: "
-                 "forward/tangent)\n";
+    std::cerr << "usage: cuad [-r|--reverse] [--allow-unsupported] <file.cu> [functionName]\n"
+              << "  -r/--reverse          : emit reverse/adjoint mode (default: "
+                 "forward/tangent)\n"
+              << "  --allow-unsupported   : report unsupported constructs as warnings "
+                 "and exit 0\n";
     return 1;
   }
   file = positional[0];
@@ -187,7 +192,11 @@ int main(int argc, char **argv) {
       "void __syncthreads(void);\n"
       // further float / double math and integer min / max
       "float copysignf(float, float); float cbrtf(float); float rsqrtf(float); float hypotf(float, float);\n"
-      "double copysign(double, double); double cbrt(double);\n"
+      "double copysign(double, double); double cbrt(double); double hypot(double, double);\n"
+      "double round(double); double trunc(double);\n"
+      // declared so that calls parse; without a derivative rule they are reported as unsupported
+      "double erf(double); double erfc(double); double log1p(double); double expm1(double);\n"
+      "float erff(float); float erfcf(float); float log1pf(float); float expm1f(float);\n"
       "int min(int, int); int max(int, int); long min(long, long); long max(long, long);\n";
 
   std::string out;
@@ -216,6 +225,19 @@ int main(int argc, char **argv) {
     std::cerr << "cuad: warning — parse reported errors (output may be "
                  "incomplete)\n";
     return 2;
+  }
+  // Constructs that could not be differentiated: the output above still compiles but its
+  // derivatives are wrong where they occur, so this is a failure unless explicitly allowed.
+  const cuad::Diag &D = cuad::diag();
+  for (const std::string &w : D.warnings)
+    std::cerr << w << "\n";
+  for (const std::string &e : D.errors)
+    std::cerr << (allowUnsupported ? e + " [allowed]" : e) << "\n";
+  if (!D.errors.empty() && !allowUnsupported) {
+    std::cerr << "cuad: " << D.errors.size()
+              << " unsupported construct(s); the generated derivatives are not valid "
+                 "(use --allow-unsupported to emit them anyway)\n";
+    return 3;
   }
   return 0;
 }

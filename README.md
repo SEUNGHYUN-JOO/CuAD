@@ -73,12 +73,18 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
 - In-place updates of array elements inside loops must be per-element per iteration.
 - Integer locals are not taped: give a reassigned integer local a new variable for each
   value it takes.
-- Not supported: lambdas, `while` / `for (;;)` loops with `break`, and straight-line
-  in-place updates of a local-array element that an earlier statement also reads.
-- **CuAD does not yet stop on unsupported constructs.** Some are marked with a
-  `// TODO(cuad)` comment in the generated code, others are passed through without a
-  warning. Always verify generated derivatives (finite differences or a dot-product
-  test, as in `test/`) before using them.
+- Not supported in reverse mode: `while`, `do` and `switch` statements and `for` loops
+  that exit with `break`, when they touch active data. Lambdas and straight-line
+  in-place updates of a local-array element that an earlier statement also reads are
+  not supported in either mode.
+- **Unsupported constructs are rejected.** CuAD reports each one as
+  `file:line:col: error: ...` and exits with status 3; the code it still writes is
+  marked with `TODO(cuad)` comments and its derivatives are not valid there.
+  `--allow-unsupported` turns these errors into notes and exits 0. Constructs that are
+  supported but need care (a non-canonical loop, a dropped integer return value) are
+  reported as warnings.
+- A clean exit is not a proof of correctness. Verify new kernels with finite
+  differences or a dot-product test, as the scripts in `test/` do.
 
 ## Build
 
@@ -103,6 +109,9 @@ The command-line tool is `cuad`:
 
 Without `function`, every function defined in the file is differentiated. The generated
 code includes `cuad_rt.h` (tape and `atomicAdd` helpers, in `test/`).
+
+Exit status: `0` success, `1` usage or file error, `2` the source did not parse,
+`3` unsupported constructs were found (see the `error:` lines on standard error).
 
 ## Tests and examples
 

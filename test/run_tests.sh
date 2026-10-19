@@ -29,6 +29,25 @@ g++ -O2 -std=c++17 -Itest test/verify_reverse.cpp -o test/out/verify_reverse
 test/out/verify_reverse || fail=1
 
 echo
+echo "=== NESTED VALUE-RETURNING CALLS + MATH RULES: tangent FD + adjoint vs tangent ==="
+g++ -O2 -std=c++17 -Itest test/verify_extra.cpp -o test/out/verify_extra
+test/out/verify_extra || fail=1
+
+echo
+echo "=== UNSUPPORTED CONSTRUCTS must be rejected with located errors (exit 3) ==="
+for m in "" "-r"; do
+  want=1; [ "$m" = "-r" ] && want=3        # forward: erf; reverse: while, break, erf
+  if "$CUAD" $m test/unsupported/bad.cu > /dev/null 2> test/out/unsupported$m.err; then
+    echo "  [FAIL] mode ${m:-fwd}: accepted"; fail=1
+  else
+    rc=$?; n=$(grep -c "error: cuad" test/out/unsupported$m.err || true)
+    ok=FAIL; [ "$rc" -eq 3 ] && [ "$n" -eq "$want" ] && ok=PASS
+    echo "  mode ${m:-fwd}: exit $rc, $n located errors (expected $want)  [$ok]"
+    [ "$ok" = PASS ] || fail=1
+  fi
+done
+
+echo
 echo "=== REAL CuDAFLOW kernel (c2pKernel): tangent FD + adjoint dot-test ==="
 ./cuad    examples/c2p.cu > examples/c2p_d.cuh
 ./cuad -r examples/c2p.cu > examples/c2p_b.cuh

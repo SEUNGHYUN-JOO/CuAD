@@ -19,6 +19,7 @@
 
 #pragma once
 #include "Activity.h"
+#include "Diag.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
@@ -40,6 +41,12 @@ class ForwardMode {
   PrintingPolicy PP;
   Activity Act;
   std::string curRetDot_; // tangent out-param name of the function being emitted
+  // Tangent calls hoisted out of the statement being emitted: a value-returning user
+  // function nested in an expression (`0.5 * (f(a) + f(b))`) gets its _d companion
+  // called just before the statement, and the expression uses the temporary.
+  mutable std::string pre_;
+  mutable std::string curInd_;
+  mutable int callTmp_ = 0;
 
 public:
   explicit ForwardMode(ASTContext &C)
@@ -94,6 +101,14 @@ public:
 private:
   // ---------- small helpers ----------
   std::string tstr(QualType qt) const { return qt.getAsString(PP); }
+
+  // Record an unsupported construct at its source location and return the marker text
+  // that is still written into the generated code.
+  std::string unsupported(SourceLocation L, const std::string &what,
+                          const std::string &marker) const {
+    diag().add(SM, L, true, "cuad (forward mode) cannot differentiate " + what);
+    return marker;
+  }
 
   std::string src(SourceRange r) const {
     return Lexer::getSourceText(CharSourceRange::getTokenRange(r), SM, LO).str();
@@ -201,10 +216,11 @@ private:
         const Expr *s = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *d = dyn_cast<DeclRefExpr>(s))
           return Act.isVaried(d->getDecl()) ? "(*" + declName(d) + "_d)" : "0";
-        return "0 /*cuad: deref of complex ptr*/";
+        return unsupported(uo->getBeginLoc(), "a dereference of a computed pointer",
+                           "0 /*cuad: deref of complex ptr*/");
       }
       default:
-        return "0 /*cuad: unhandled unary op*/";
+        return unsupported(uo->getBeginLoc(), "this unary operator", "0 /*cuad: unhandled unary op*/");
       }
     }
 
@@ -225,7 +241,7 @@ private:
         return "(" + num + ")/((" + pr + ")*(" + pr + "))";
       }
       default:
-        return "0 /*cuad: unhandled binary op*/";
+        return unsupported(e->getBeginLoc(), "this binary operator", "0 /*cuad: unhandled binary op*/");
       }
     }
 
@@ -252,7 +268,8 @@ private:
       return "0";
     }
 
-    return "0 /*cuad: unhandled expr: " + prim(e) + "*/";
+    return unsupported(e->getBeginLoc(), "the expression `" + prim(e) + "`",
+                       "0 /*cuad: unhandled expr: " + prim(e) + "*/");
   }
 
   std::string diffCall(const CallExpr *call) const {
@@ -260,20 +277,52 @@ private:
     std::string fn = fd ? fd->getNameAsString() : "";
     unsigned n = call->getNumArgs();
 
+    // A value-returning user function inside a larger expression: its tangent comes from
+    // the _d companion, called before the statement (see pre_). The arguments are read
+    // before the statement executes, so they hold the same values as in the primal.
+    if (isUserDiffFn(fd) && fd->getReturnType()->isRealFloatingType()) {
+      std::string t = "_cuad_c" + std::to_string(callTmp_++) + "_d";
+      pre_ += curInd_ + tstr(fd->getReturnType()) + " " + t + " = 0;\n" + curInd_ +
+              buildDiffCall(call, t) + ";\n";
+      return t;
+    }
+
     // Normalize single-precision CUDA intrinsics (sinf, powf, ...) to their
     // double-named rule; the primal text keeps the original spelling.
     static const char *kF[] = {"sinf",  "cosf",  "tanf",   "expf",  "logf",
                                "sqrtf", "tanhf", "fabsf",  "powf",  "fminf",
-                               "fmaxf", "asinf", "acosf",  "atanf", "atan2f"};
+                               "fmaxf", "asinf", "acosf",  "atanf", "atan2f",
+                               "floorf", "ceilf", "roundf", "truncf", "copysignf",
+                               "hypotf", "cbrtf"};
     for (const char *g : kF)
       if (fn == g) {
         fn.pop_back();
         break;
       }
 
+    // floor / ceil / round / trunc are piecewise constant: zero derivative almost everywhere
+    if (fn == "floor" || fn == "ceil" || fn == "round" || fn == "trunc")
+      return "0";
+
     if (n >= 1) {
       const Expr *a0 = call->getArg(0);
       std::string pa = prim(a0), da = diff(a0);
+
+      // copysign(a, b) = |a| sgn(b): d/da = sgn(a) sgn(b), d/db = 0
+      if (n == 2 && fn == "copysign") {
+        if (da == "0")
+          return "0";
+        return mulT("(((" + pa + ") >= 0) == ((" + prim(call->getArg(1)) + ") >= 0) ? 1.0 : -1.0)", da);
+      }
+      // hypot(a, b) = sqrt(a^2 + b^2): d = (a a' + b b') / hypot(a, b)
+      if (n == 2 && fn == "hypot") {
+        const Expr *a1 = call->getArg(1);
+        std::string pb = prim(a1), db = diff(a1);
+        std::string num = addT(mulT("(" + pa + ")", da), mulT("(" + pb + ")", db));
+        if (num == "0")
+          return "0";
+        return "(" + num + ")/hypot(" + pa + ", " + pb + ")";
+      }
 
       // atan2(y, x)' = (x y' - y x')/(x^2 + y^2)
       if (n == 2 && fn == "atan2") {
@@ -320,6 +369,8 @@ private:
         return "(" + da + ")/(" + pa + ")";
       if (fn == "sqrt")
         return "(" + da + ")/(2*sqrt(" + pa + "))";
+      if (fn == "cbrt")
+        return "(" + da + ")/(3*cbrt(" + pa + ")*cbrt(" + pa + "))";
       if (fn == "tanh")
         return mulT("(1 - tanh(" + pa + ")*tanh(" + pa + "))", da);
       if (fn == "fabs" || fn == "abs")
@@ -331,7 +382,8 @@ private:
       if (fn == "acos")
         return "-(" + da + ")/sqrt(1-(" + pa + ")*(" + pa + "))";
     }
-    return "0 /*cuad: unhandled call: " + fn + "*/";
+    return unsupported(call->getBeginLoc(), "a call to `" + fn + "` (no derivative rule)",
+                       "0 /*cuad: unhandled call: " + fn + "*/");
   }
 
   // ---------- lvalue tangent (assignment target) ----------
@@ -409,7 +461,21 @@ private:
   }
 
   // ---------- statement transformation ----------
+  // Leaf statements collect hoisted tangent calls (pre_) and emit them first.
   std::string genStmt(const Stmt *s, int depth) const {
+    if (isa<CompoundStmt>(s) || isa<ForStmt>(s) || isa<IfStmt>(s) || isa<WhileStmt>(s))
+      return genStmtInner(s, depth);
+    std::string savedPre = pre_, savedInd = curInd_;
+    pre_.clear();
+    curInd_ = std::string(depth * 2, ' ');
+    std::string body = genStmtInner(s, depth);
+    std::string out = pre_ + body;
+    pre_ = savedPre;
+    curInd_ = savedInd;
+    return out;
+  }
+
+  std::string genStmtInner(const Stmt *s, int depth) const {
     std::string ind(depth * 2, ' ');
 
     if (const auto *cs = dyn_cast<CompoundStmt>(s)) {
@@ -490,8 +556,14 @@ private:
 
     if (isa<NullStmt>(s))
       return ind + ";\n";
+    // the tangent follows the primal control flow, so jumps are copied as they are
+    if (isa<BreakStmt>(s))
+      return ind + "break;\n";
+    if (isa<ContinueStmt>(s))
+      return ind + "continue;\n";
 
     // Unhandled: reproduce primal so the emitted code still compiles.
+    unsupported(s->getBeginLoc(), "this statement (kept as primal only)", "");
     return ind + src(s->getSourceRange()) +
            "; // TODO(cuad): unhandled statement, primal only\n";
   }
@@ -529,7 +601,8 @@ private:
         if (!lv.empty())
           return "&" + lv;
       }
-    return "0 /*cuad: unhandled pointer tangent*/";
+    return unsupported(e->getBeginLoc(), "the tangent of this pointer expression",
+                       "0 /*cuad: unhandled pointer tangent*/");
   }
 
   std::string genDeclStmt(const DeclStmt *ds, const std::string &ind) const {
@@ -622,7 +695,8 @@ private:
         break;
       }
       default:
-        tan = "/* cuad: unsupported compound assignment */";
+        tan = unsupported(bo->getBeginLoc(), "this compound assignment",
+                          "/* cuad: unsupported compound assignment */");
       }
     }
     // tangent first (uses old primal values), then primal update

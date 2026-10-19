@@ -27,6 +27,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtCXX.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include <map>
@@ -36,6 +37,7 @@
 #include <vector>
 
 #include "Activity.h"
+#include "Diag.h"
 
 namespace cuad {
 using namespace clang;
@@ -54,6 +56,39 @@ class ReverseMode {
   mutable bool noPush_ = false;      // emitting a push-free primal (a recompute loop's forward pass)
   mutable std::set<const VarDecl *> hoisted_; // branch-local declarations hoisted to their block
   mutable std::map<const ForStmt *, int> shadowId_; // loops whose in-place local arrays are saved
+
+  // Record an unsupported construct (error) or a questionable one (warning) at its location.
+  void unsupported(SourceLocation L, const std::string &what) const {
+    diag().add(SM, L, true, "cuad (reverse mode) cannot differentiate " + what);
+  }
+  void caution(SourceLocation L, const std::string &what) const {
+    diag().add(SM, L, false, "cuad (reverse mode): " + what);
+  }
+  // does the statement read or write any varied variable?
+  bool hasActive(const Stmt *s) const {
+    if (!s)
+      return false;
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (Act.isVaried(d->getDecl()))
+        return true;
+    for (const Stmt *c : s->children())
+      if (hasActive(c))
+        return true;
+    return false;
+  }
+  // a `break` that leaves this loop body (not one belonging to a nested loop or switch)
+  static bool containsBreak(const Stmt *s) {
+    if (!s)
+      return false;
+    if (isa<BreakStmt>(s))
+      return true;
+    if (isa<ForStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s))
+      return false;
+    for (const Stmt *c : s->children())
+      if (containsBreak(c))
+        return true;
+    return false;
+  }
 
 public:
   explicit ReverseMode(ASTContext &C)
@@ -100,9 +135,12 @@ public:
     if (!ret->isVoidType()) {
       if (ret->isRealFloatingType())
         curRetSeed_ = FD->getNameAsString() + "_seed_b";
-      else
+      else {
+        caution(FD->getBeginLoc(), "the non-floating return value of `" + FD->getNameAsString() +
+                                       "` is dropped in the adjoint");
         out += "// TODO(cuad): reverse of non-floating return type; emitting "
                "void adjoint.\n";
+      }
     }
     out += "void " + FD->getNameAsString() + "_b(";
     bool first = true;
@@ -791,6 +829,7 @@ private:
     else if (fn == "acos")
       m = "-" + one + "/" + F("sqrt") + "(" + one + "-(" + pa + ")*(" + pa + "))";
     else {
+      unsupported(call->getBeginLoc(), "a call to `" + fn + "` (no derivative rule)");
       out += ind + "// TODO(cuad): adjoint of call '" + fn + "' unhandled\n";
       return;
     }
@@ -908,6 +947,7 @@ private:
     }
     if (isa<IntegerLiteral>(e) || isa<CXXNullPtrLiteralExpr>(e) || isa<GNUNullExpr>(e))
       return "nullptr";
+    unsupported(e->getBeginLoc(), "the adjoint of the pointer expression `" + prim(e) + "`");
     return "nullptr /* TODO(cuad): pointer adjoint of '" + prim(e) + "' */";
   }
   // an `if (c) { ...; continue; }` / `if (c) { ...; return x; }` / bare `if (c) continue;` without else: the rest of
@@ -983,8 +1023,11 @@ private:
       if (const auto *vd = dyn_cast<VarDecl>(d)) {
         if (vd->hasInit() && !isa<InitListExpr>(vd->getInit()->IgnoreImplicit()))
           out += ind + vd->getNameAsString() + " = " + prim(vd->getInit()) + ";\n";
-        else if (vd->hasInit())
+        else if (vd->hasInit()) {
+          unsupported(vd->getBeginLoc(), "the initialiser list of the branch-local array `" +
+                                             vd->getNameAsString() + "`");
           out += ind + "// TODO(cuad): hoisted array initialiser of " + vd->getNameAsString() + "\n";
+        }
         if (vd->hasInit() && Act.isVaried(vd) && isFloatPtrType(vd->getType()))
           out += ind + vd->getNameAsString() + "_b = " + adjPtrExpr(vd->getInit()) + ";\n";
       }
@@ -1254,6 +1297,9 @@ private:
         return reverseAssign(bo, depth);
 
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
+      if (containsBreak(fs->getBody()) && hasActive(fs->getBody()))
+        unsupported(fs->getBeginLoc(), "a loop that exits with `break` (its trip count is not known "
+                                       "when the loop is reversed)");
       bool recompute = loopHasActiveLocals(fs->getBody());
       std::string hdr;
       if (!reverseForHeader(fs, hdr)) {
@@ -1263,9 +1309,12 @@ private:
           init.pop_back();
         hdr = init + "; " + (fs->getCond() ? prim(fs->getCond()) : "") + "; " +
               (fs->getInc() ? prim(fs->getInc()) : "");
-        if (!recompute)
+        if (!recompute) {
+          caution(fs->getBeginLoc(), "a non-canonical loop is reversed in forward order "
+                                     "(correct only if its iterations are independent)");
           out += ind + "// TODO(cuad): non-canonical loop kept in forward order "
                        "(correct only if the body is order-independent)\n";
+        }
       }
       std::string restore = shadowCopy(fs, false, ind);
       out = restore + out + ind + "for (" + hdr + ") {\n";
@@ -1297,6 +1346,10 @@ private:
       return out + "\n";
     }
 
+    // anything else that touches active data has no reverse here: say so instead of dropping it
+    if ((isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s) || isa<GotoStmt>(s) ||
+         isa<CXXForRangeStmt>(s)) && hasActive(s))
+      unsupported(s->getBeginLoc(), "this loop or jump (only counted `for` loops are reversed)");
     return out;
   }
 
@@ -1359,6 +1412,7 @@ private:
                 ind);
         break;
       default:
+        unsupported(bo->getBeginLoc(), "this compound assignment");
         out += ind + "// TODO(cuad): unhandled compound assignment\n";
       }
       return out;
@@ -1390,6 +1444,7 @@ private:
     }
     switch (bo->getOpcode()) {
     default:
+      unsupported(bo->getBeginLoc(), "`*=` or `/=` on an output (it would need a tape)");
       return ind + "// TODO(cuad): *= or /= on a non-taped target needs a tape\n";
     }
   }
