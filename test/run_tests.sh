@@ -34,6 +34,11 @@ g++ -O2 -std=c++17 -Itest test/verify_extra.cpp -o test/out/verify_extra
 test/out/verify_extra || fail=1
 
 echo
+echo "=== LOOP-CARRIED SCALARS in recompute loops: adjoint vs FD ==="
+g++ -O2 -std=c++17 -Itest test/verify_loops.cpp -o test/out/verify_loops
+test/out/verify_loops || fail=1
+
+echo
 echo "=== UNSUPPORTED CONSTRUCTS must be rejected with located errors (exit 3) ==="
 for m in "" "-r"; do
   want=1; [ "$m" = "-r" ] && want=3        # forward: erf; reverse: while, break, erf

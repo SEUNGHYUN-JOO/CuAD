@@ -1,3 +1,4 @@
+#include <algorithm>
 // cuad — reverse (adjoint) mode source-to-source AD for CUDA.
 //
 // For y = f(x) this generates f_b that propagates adjoints backward:
@@ -54,6 +55,7 @@ class ReverseMode {
   std::string curRetSeed_;           // return-adjoint seed param (value-ret fns)
   mutable int tmp_ = 0;              // fresh snapshot-variable counter
   mutable bool noPush_ = false;      // emitting a push-free primal (a recompute loop's forward pass)
+  mutable const ForStmt *ckptLoop_ = nullptr; // the recompute loop whose own reverse will pop its checkpoints
   mutable std::set<const VarDecl *> hoisted_; // branch-local declarations hoisted to their block
   mutable std::map<const ForStmt *, int> shadowId_; // loops whose in-place local arrays are saved
 
@@ -314,6 +316,27 @@ private:
       if (loopHasActiveLocals(c))
         return true;
     return false;
+  }
+  // Scalars that a recompute loop carries from one iteration to the next: taped locals declared outside the loop
+  // and reassigned inside it. Pure accumulators are not taped and so are not carried. The backward loop
+  // recomputes an iteration from the values these hold when it starts, so the forward pass checkpoints them at
+  // the top of every iteration and the backward loop restores them before recomputing.
+  void collectCarried(const ForStmt *fs, const Stmt *s, std::vector<const VarDecl *> &out) const {
+    if (!s)
+      return;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        if (const VarDecl *v = localScalarTarget(bo->getLHS()))
+          if (taped_.count(v) && !withinRange(fs->getSourceRange(), v->getBeginLoc()) &&
+              std::find(out.begin(), out.end(), v) == out.end())
+            out.push_back(v);
+    for (const Stmt *c : s->children())
+      collectCarried(fs, c, out);
+  }
+  std::vector<const VarDecl *> carriedVars(const ForStmt *fs) const {
+    std::vector<const VarDecl *> out;
+    collectCarried(fs, fs->getBody(), out);
+    return out;
   }
   static bool isUserDiffFn(const FunctionDecl *fd) {
     return fd && fd->hasBody() && fd->getDeclName().isIdentifier();
@@ -1134,6 +1157,9 @@ private:
       std::string cond = fs->getCond() ? prim(fs->getCond()) : "";
       std::string inc = fs->getInc() ? prim(fs->getInc()) : "";
       std::string out = shadowCopy(fs, true, ind) + ind + "for (" + init + "; " + cond + "; " + inc + ") {\n";
+      if (loopHasActiveLocals(fs->getBody()) && (!noPush_ || fs == ckptLoop_))
+        for (const VarDecl *v : carriedVars(fs))
+          out += ind + "  cuad_push(" + v->getNameAsString() + ");\n";
       // a recompute loop re-materialises its primal, with its own pushes, inside the
       // backward loop - its forward pass must not push, NESTED ones included (genBlock only caught top-level ones).
       // Pushes left behind by a loop inside an `if` misaligned every pop of a value pushed before the loop: in
@@ -1326,6 +1352,9 @@ private:
           body.assign(cs->body_begin(), cs->body_end());
         else if (fs->getBody())
           body.push_back(fs->getBody());
+        std::vector<const VarDecl *> carried = carriedVars(fs);
+        for (auto it = carried.rbegin(); it != carried.rend(); ++it)
+          out += ind + "  cuad_pop(" + (*it)->getNameAsString() + ");\n";
         out += genBlock(body, depth + 1);
       } else {
         out += reverseBody(fs->getBody(), depth + 1);
@@ -1520,12 +1549,15 @@ private:
           // a grid-stride loop's iterations are independent elements (nothing carried between them): no primal
           // pass needed - the backward loop re-materialises each one
           std::string init = fs->getInit() ? src(fs->getInit()->getSourceRange()) : "";
-          if (init.find("threadIdx") != std::string::npos)
+          if (init.find("threadIdx") != std::string::npos && carriedVars(fs).empty())
             continue;
           bool saved = noPush_;
+          const ForStmt *savedLoop = ckptLoop_;
           noPush_ = true;
+          ckptLoop_ = fs;
           out += genPrimal(s, depth);
           noPush_ = saved;
+          ckptLoop_ = savedLoop;
           continue;
         }
       out += genPrimal(s, depth);
