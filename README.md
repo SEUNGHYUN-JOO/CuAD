@@ -48,8 +48,8 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
 
 - **Forward and reverse mode** for `__global__` and `__device__` functions, including
   calls between user functions (each callee gets its own companion).
-- **Activity analysis**: only variables that depend on active inputs and influence
-  active outputs are differentiated.
+- **Activity analysis**: only variables that depend on active inputs are differentiated
+  (forward dependence analysis).
 - **Tape for overwritten values**: values that are overwritten before the reverse sweep
   are pushed to a per-thread tape (`cuad_rt.h`); pure accumulations (`v = v + e`) are
   recognised and need no tape.
