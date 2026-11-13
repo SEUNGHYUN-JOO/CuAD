@@ -60,8 +60,8 @@ GF="-std=c++17 -O3 -fno-fast-math -ffp-contract=off $CUDA -fPIC -shared -Itest -
 nvidia-smi --query-gpu=name,driver_version,utilization.gpu,memory.used --format=csv,noheader | tee $O/gpu-env.txt
 
 step "verification (Sec. VI)"
-$O/tolerance_sweep > $O/tolerance-sweep.jsonl || die tolerance_sweep            # Fig. 2
-$PY $S/c2p_robustness.py || die robustness                                     # Fig. 3
+$O/tolerance_sweep > $O/tolerance-sweep.jsonl || die tolerance_sweep            # Fig. 3
+$PY $S/c2p_robustness.py || die robustness                                     # Fig. 4
 $PY $S/compare_c2p_variants.py || die variants                                 # Table I
 $PY $S/check_adjoint.py > /dev/null || die check_adjoint                       # C2P kernel and trajectory vs FD
 $PY $S/check_enzyme_host.py > /dev/null || die enzyme_host
@@ -70,21 +70,21 @@ $PY $S/check_cooling.py || die cooling
 $O/dot2d > $O/dot2d.txt || die dot2d
 
 step "performance (Sec. VII)"
-$PY $S/compare_c2p_gpu.py || die compare_gpu                                   # Fig. 4, Table IV
+$PY $S/compare_c2p_gpu.py || die compare_gpu                                   # Fig. 5, Table IV
 $PY $S/c2p_enzyme_heap.py || die heap
 [ -x "$JAXPY" ] && $JAXPY $S/jax_c2p_baseline.py
 
 step "application (Sec. VIII)"
-$PY $S/check_primal.py || die primal                                           # Fig. 5
+$PY $S/check_primal.py || die primal                                           # Fig. 6
 $PY $S/check_gpu.py || die check_gpu
-$PY $S/smooth_and_taylor.py || die taylor                                      # Fig. 6
+$PY $S/smooth_and_taylor.py || die taylor                                      # Fig. 7
 $PY $S/check2d.py || die check2d
-bash $S/run_reproduction.sh || die reproduction                                # Table VI, Fig. 7
+bash $S/run_reproduction.sh || die reproduction                                # Table VI, Fig. 8
 $PY $S/inverse_density.py 512 1 cuad 0.01 1e-6 0 > /dev/null || die inverse_noise
 $PY $S/inverse_density.py 512 1 enzyme 0.01 1e-6 0 > /dev/null || die inverse_noise_enzyme
-$PY $S/inverse_density2d.py 64 1 0 || die inverse2d                            # Fig. 8
+$PY $S/inverse_density2d.py 64 1 0 || die inverse2d                            # Fig. 9
 $PY $S/inverse_density2d.py 64 1 0.01 || die inverse2d_noise
 
 step "figures"
-$PY $S/make_figures.py || die figures
+$PY $S/make_schematics.py || die figures   # every figure: imports make_figures.py, then Figs. 1 and 2
 echo "DONE"

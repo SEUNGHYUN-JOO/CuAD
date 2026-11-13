@@ -101,7 +101,7 @@ def save(fig, name):
     print('wrote', name)
 
 
-# Fig. 2: derivative error against iteration count, analytic reference (tolerance_sweep.cpp)
+# Fig. 3: derivative error against iteration count, analytic reference (tolerance_sweep.cpp)
 rows = [json.loads(l) for l in (out / 'tolerance-sweep.jsonl').read_text().splitlines() if l.strip()]
 fig, axs = new(TWO, 2.4, ncols=3, sharey=True)
 clip = lambda v: np.maximum(np.array(v, dtype=float), 1e-17)
@@ -122,13 +122,13 @@ axs[0].set_ylabel('relative error')
 top_legend(fig, axs, 4)
 save(fig, 'fig_iteration_sweep.pdf')
 
-# Fig. 3: C2P Jacobian error over the state space (c2p_robustness.py)
+# Fig. 4: C2P Jacobian error over the state space (c2p_robustness.py)
 z = np.load(out / 'c2p-robustness.npz')
 fig, axs = new(TWO, 2.5, ncols=2)
 lt, lw = np.log10(z['theta']), np.log10(z['W'])
 edges = lambda c: np.concatenate([[1.5 * c[0] - 0.5 * c[1]], 0.5 * (c[1:] + c[:-1]), [1.5 * c[-1] - 0.5 * c[-2]]])
 excluded = z['rec_bisect'] >= 1e-8   # primal less accurate than 1e-8: not in Table I
-print('Fig. 3: states', excluded.size, 'excluded', int(excluded.sum()))
+print('Fig. 4: states', excluded.size, 'excluded', int(excluded.sum()))
 for ax, key, title, cl in ((axs[0], 'err_bisect', '(a) error of the CuAD adjoint of the bisection C2P',
                             r'$\log_{10}$ of the relative error'),
                            (axs[1], 'cond', r'(b) condition number of $\partial U/\partial P$',
@@ -145,7 +145,7 @@ for ax, key, title, cl in ((axs[0], 'err_bisect', '(a) error of the CuAD adjoint
     snap_colorbar(im, cb, float(np.floor(v.min())), float(np.ceil(v.max())))
 save(fig, 'fig_c2p_robustness.pdf')
 
-# Fig. 4: GPU cost of the C2P adjoint against cell count (compare_c2p_gpu.py, jax_c2p_baseline.py)
+# Fig. 5: GPU cost of the C2P adjoint against cell count (compare_c2p_gpu.py, jax_c2p_baseline.py)
 g = json.loads((out / 'c2p-gpu-compare.json').read_text())
 jx = json.loads((out / 'jax-c2p-baseline.json').read_text())['rows']
 fig, axs = new(TWO, 2.7, ncols=2, sharey=True)
@@ -171,7 +171,7 @@ axs[0].set_ylabel('time per call (ms)')
 top_legend(fig, axs, 3)
 save(fig, 'fig_gpu_cost.pdf')
 
-# Fig. 5: Riemann problems against the exact solution (check_primal.py)
+# Fig. 6: Riemann problems against the exact solution (check_primal.py)
 fig, axs = new(TWO, 2.4, ncols=2)
 for ax, name, title in zip(axs, ['MM1', 'MM2'], ['(a) problem 1', '(b) problem 2']):
     f = out / f'primal-{name}-1600.npz'
@@ -184,7 +184,7 @@ for ax, name, title in zip(axs, ['MM1', 'MM2'], ['(a) problem 1', '(b) problem 2
 top_legend(fig, axs, 2)
 save(fig, 'fig_riemann.pdf')
 
-# Fig. 6: Taylor test of the 2-D adjoint (smooth_and_taylor.py)
+# Fig. 7: Taylor test of the 2-D adjoint (smooth_and_taylor.py)
 st = json.loads((out / 'smooth-and-taylor.json').read_text())
 fig, ax = new(ONE, 2.5)
 for r, mk, col in zip(st['taylor_2d'], ('o-', 's--'), (C['cuad'], C['enzyme'])):
@@ -199,7 +199,7 @@ snap(ax, 'x'); snap(ax, 'y')
 ax.set_xlabel('$h$'); ax.set_ylabel('remainder'); ax.legend(loc='lower right')
 save(fig, 'fig_taylor.pdf')
 
-# Fig. 7: 1-D medium reconstruction, exact gradient against differentiated bisection (inverse_density.py)
+# Fig. 8: 1-D medium reconstruction, exact gradient against differentiated bisection (inverse_density.py)
 fig, axs = new(TWO, 2.6, ncols=2)
 names = {'cuad': 'exact gradient (CuAD)', 'enzyme': 'differentiated bisection (Enzyme)'}
 for tool, mk in (('cuad', '-'), ('enzyme', '--')):
@@ -219,7 +219,7 @@ axs[1].set_title('(b) convergence')
 top_legend(fig, axs, 2)
 save(fig, 'fig_inverse1d.pdf')
 
-# Fig. 8: 2-D reconstruction (inverse_density2d.py)
+# Fig. 9: 2-D reconstruction (inverse_density2d.py)
 for f in sorted(out.glob('inverse2d-*-noise0.npz')):
     z = np.load(f); n = int(z['n'])
     fig, axs = new(TWO, 1.95, ncols=4)

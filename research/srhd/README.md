@@ -15,20 +15,21 @@ host drivers; this directory holds the experiments. Raw results are written to `
 
 | Manuscript | Script | Raw result |
 |---|---|---|
-| Fig. 2, iteration sweep (analytic cubic) | `tolerance_sweep.cpp`, `sweep_kernels.cu` | `out/tolerance-sweep.jsonl` |
+| Figs. 1 and 2, overview and derivative of bisection (schematic, no raw data) | `make_schematics.py` | |
+| Fig. 3, iteration sweep (analytic cubic) | `tolerance_sweep.cpp`, `sweep_kernels.cu` | `out/tolerance-sweep.jsonl` |
 | Table I, C2P Jacobian vs 50-digit reference, four solvers, CuAD and Enzyme | `compare_c2p_variants.py`, `c2p_variants.cu`, `c2p_variants_host.cpp` | `out/c2p-variants.json` |
-| Fig. 3, robustness over W and p/rho | `c2p_robustness.py` | `out/c2p-robustness.{json,npz}` |
+| Fig. 4, robustness over W and p/rho | `c2p_robustness.py` | `out/c2p-robustness.{json,npz}` |
 | Table II, refusal and bound rules | `test/verify_solve_policy.cpp`, `test/unsupported/solve_loops.cu` (CuAD test suite) | `bash test/run_tests.sh` |
 | multi-point root finders | `test/verify_rootfinders.cpp` (test suite) | |
 | C2P adjoint vs FD; Enzyme and Clad on the same source | `check_adjoint.py`, `check_enzyme_host.py`, `check_clad_host.py`, `clad_newton_min.cpp` | `out/adjoint-check.json`, `out/enzyme-host-check.json`, `out/clad-host-check.json` |
 | cooling kernel | `check_cooling.py` | `out/cooling-check.json` |
-| Fig. 4, Tables III and IV, GPU cost | `compare_c2p_gpu.py`, `c2p_gpu_compare.cu`, `c2p_manual_adjoint.cu`, `c2p_fixed.cu`, `c2p_enzyme_heap.py`, `jax_c2p_baseline.py` | `out/c2p-gpu-compare.json`, `out/c2p-enzyme-heap.json`, `out/jax-c2p-baseline.json` |
-| primal validation, Fig. 5 | `check_primal.py`, `exact_riemann.py` | `out/primal.json`, `out/primal-MM*.npz` |
-| smooth order, Fig. 6 Taylor test | `smooth_and_taylor.py` | `out/smooth-and-taylor.json` |
+| Fig. 5, Tables III and IV, GPU cost | `compare_c2p_gpu.py`, `c2p_gpu_compare.cu`, `c2p_manual_adjoint.cu`, `c2p_fixed.cu`, `c2p_enzyme_heap.py`, `jax_c2p_baseline.py` | `out/c2p-gpu-compare.json`, `out/c2p-enzyme-heap.json`, `out/jax-c2p-baseline.json` |
+| primal validation, Fig. 6 | `check_primal.py`, `exact_riemann.py` | `out/primal.json`, `out/primal-MM*.npz` |
+| smooth order, Fig. 7 Taylor test | `smooth_and_taylor.py` | `out/smooth-and-taylor.json` |
 | 2-D checks (1-D consistency, symmetry, FD, dot test) | `check2d.py`, `dot2d_kernels.cpp` | `out/check2d.json`, `out/dot2d.txt` |
 | GPU adjoint vs host, timing | `check_gpu.py`, `srhd_gpu.cu` | `out/gpu-check.json` |
-| Tables V and VI, Fig. 7, 1-D reconstruction (with and without noise) | `inverse_density.py`, `run_reproduction.sh` | `out/reproduction.json`, `out/inverse-density-*-case*.{json,npz}` |
-| Fig. 8, 2-D reconstruction | `inverse_density2d.py`, `srhd2d_gpu.cu` | `out/inverse2d-64-1-noise*.{json,npz}` |
+| Tables V and VI, Fig. 8, 1-D reconstruction (with and without noise) | `inverse_density.py`, `run_reproduction.sh` | `out/reproduction.json`, `out/inverse-density-*-case*.{json,npz}` |
+| Fig. 9, 2-D reconstruction | `inverse_density2d.py`, `srhd2d_gpu.cu` | `out/inverse2d-64-1-noise*.{json,npz}` |
 
 ## Environment of the reported runs
 
