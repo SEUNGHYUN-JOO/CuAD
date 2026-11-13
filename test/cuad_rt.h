@@ -167,6 +167,12 @@ static inline void cuad_tape_free() {
 #ifndef CUAD_SOLVE_MAXIT
 #define CUAD_SOLVE_MAXIT 200
 #endif
+// Before that iteration, the loop's exit state must be a fixed point of one iteration (or, for a bracketing loop,
+// a collapsed bracket) to within this relative tolerance; a loop that left through its `break` for another reason
+// (a threshold, an iteration cap) traps instead of receiving the derivative of a fixed point it did not reach.
+#ifndef CUAD_SOLVE_TOL
+#define CUAD_SOLVE_TOL 1e-6
+#endif
 #define cuad_solve_fail() cuad_tape_fail()
 
 // Bounds of the element ranges that a loop's per-iteration checkpoint saves (see ReverseMode.h).

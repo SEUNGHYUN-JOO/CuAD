@@ -1618,6 +1618,33 @@ private:
     return "";
   }
 
+  // A loop recognised as a convergence loop may still have left through its `break` for another reason (a
+  // threshold, an iteration cap): then its result is not a fixed point and the implicit adjoint would be the
+  // derivative of a different quantity. One more iteration from the exit state must not move it by more than
+  // CUAD_SOLVE_TOL (relative); otherwise trap.
+  std::string fixedPointCheck(const SolveInfo &si, const std::string &id, int depth) const {
+    const std::string ind(depth * 2, ' '), in = ind + "  ";
+    std::string out = ind + "{ // cuad: the loop must have stopped at a fixed point of one iteration\n";
+    for (const VarDecl *v : si.state)
+      out += in + tstr(v->getType().getNonReferenceType().getUnqualifiedType()) + " _cuad_f" + id + "_" +
+             v->getNameAsString() + " = " + v->getNameAsString() + ";\n";
+    bool saved = noPush_;
+    noPush_ = true;
+    out += in + "{\n";
+    for (const Stmt *s : si.iter)
+      out += genPrimal(s, depth + 2);
+    out += in + "}\n";
+    noPush_ = saved;
+    out += in + "double _cuad_fr = 0, _cuad_fs = 0;\n";
+    for (const VarDecl *v : si.state) {
+      std::string x = v->getNameAsString(), f = "_cuad_f" + id + "_" + x;
+      out += in + "_cuad_fr = fmax(_cuad_fr, fabs((double)(" + x + " - " + f + "))); _cuad_fs = fmax(_cuad_fs, fabs((double)" +
+             f + ")); " + x + " = " + f + ";\n";
+    }
+    out += in + "if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs) cuad_solve_fail();\n" + ind + "}\n";
+    return out;
+  }
+
   // declarations `T x_b = 0;` that hide the given adjoints inside a block
   std::string shadowAdj(const std::vector<const VarDecl *> &vs, const std::string &ind) const {
     std::string out;
@@ -1643,6 +1670,7 @@ private:
         out += i1 + T(v) + " _cuad_s" + id + "_" + x + " = " + x + "_b, _cuad_l" + id + "_" + x + " = " + x + "_b;\n";
         out += i1 + x + "_b = 0;\n";
       }
+      out += fixedPointCheck(si, id, depth + 1);
       out += i1 + "int _cuad_ok" + id + " = 0;\n";
       out += i1 + "for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {\n";
       for (const VarDecl *v : si.state)
@@ -1681,6 +1709,16 @@ private:
     std::string sum;
     for (const VarDecl *v : si.state)
       sum += (sum.empty() ? "" : " + ") + v->getNameAsString() + "_b";
+    { // the loop must have left with a collapsed bracket: every bound equal to within CUAD_SOLVE_TOL
+      std::string lo, hi;
+      for (const VarDecl *v : si.state) {
+        std::string x = "(double)" + v->getNameAsString();
+        lo = lo.empty() ? x : "fmin(" + lo + ", " + x + ")";
+        hi = hi.empty() ? x : "fmax(" + hi + ", " + x + ")";
+      }
+      out += i1 + "if (" + hi + " - " + lo + " > CUAD_SOLVE_TOL * fmax(fabs(" + hi + "), fabs(" + lo +
+             "))) cuad_solve_fail();\n";
+    }
     out += i1 + Tm + " _cuad_s" + id + " = " + sum + ";\n";
     for (const VarDecl *v : si.state)
       out += i1 + v->getNameAsString() + "_b = 0;\n";

@@ -68,6 +68,20 @@ g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/ver
 test/out/verify_convergence || fail=1
 
 echo
+echo "=== CONVERGENCE-LOOP POLICY: loops that stop away from a fixed point trap; non-solve loops are rejected ==="
+"$CUAD" -r test/reverse_only/solve_policy.cu > test/out/solve_policy_b.cuh
+g++ -O2 -std=c++17 -Itest test/verify_solve_policy.cpp -o test/out/verify_solve_policy
+test/out/verify_solve_policy || fail=1
+if "$CUAD" -r test/unsupported/solve_loops.cu > /dev/null 2> test/out/solve_loops.err; then
+  echo "  [FAIL] reverse mode accepted loops it cannot differentiate"; fail=1
+else
+  n=$(grep -c "not a convergence loop" test/out/solve_loops.err || true)
+  ok=FAIL; [ "$n" -eq 4 ] && ok=PASS
+  echo "  rejected with the reason: $n located errors (expected 4)  [$ok]"
+  [ "$ok" = PASS ] || fail=1
+fi
+
+echo
 echo "=== GLOBAL TAPE (-DCUAD_GLOBAL_TAPE): concurrent threads on one tape, nested frames, bounds; ASan ==="
 g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -pthread -Itest test/verify_global_tape.cpp -o test/out/verify_global_tape
 test/out/verify_global_tape || fail=1

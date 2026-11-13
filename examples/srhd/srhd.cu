@@ -81,16 +81,17 @@ __global__ void hll_flux(const double *P, double *F, const double *gam, int n) {
     double hl = 1.0 + g / (g - 1.0) * pl / rl;
     double Dl = rl * Wl, Sl = rl * hl * Wl * Wl * vl, El = rl * hl * Wl * Wl - pl - Dl;
     double c2l = g * pl / (rl * hl);
-    double al = (vl * (1.0 - c2l) - sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))) / (1.0 - vl * vl * c2l);
-    double bl = (vl * (1.0 - c2l) + sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))) / (1.0 - vl * vl * c2l);
+    // characteristic speeds (v -/+ cs) / (1 -/+ v cs), written as (v (1 - cs^2) -/+ cs (1 - v^2)) / (1 - v^2 cs^2)
+    double al = (vl * (1.0 - c2l) - sqrt(c2l) * (1.0 - vl * vl)) / (1.0 - vl * vl * c2l);
+    double bl = (vl * (1.0 - c2l) + sqrt(c2l) * (1.0 - vl * vl)) / (1.0 - vl * vl * c2l);
     // right state
     double rr = qR[0], ur = qR[1], pr = qR[2];
     double Wr = sqrt(1.0 + ur * ur), vr = ur / Wr;
     double hr = 1.0 + g / (g - 1.0) * pr / rr;
     double Dr = rr * Wr, Sr = rr * hr * Wr * Wr * vr, Er = rr * hr * Wr * Wr - pr - Dr;
     double c2r = g * pr / (rr * hr);
-    double ar = (vr * (1.0 - c2r) - sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))) / (1.0 - vr * vr * c2r);
-    double br = (vr * (1.0 - c2r) + sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))) / (1.0 - vr * vr * c2r);
+    double ar = (vr * (1.0 - c2r) - sqrt(c2r) * (1.0 - vr * vr)) / (1.0 - vr * vr * c2r);
+    double br = (vr * (1.0 - c2r) + sqrt(c2r) * (1.0 - vr * vr)) / (1.0 - vr * vr * c2r);
     double sl = fmin(0.0, fmin(al, ar)), sr = fmax(0.0, fmax(bl, br));
     double inv = 1.0 / (sr - sl);
     F[f] = (sr * Dl * vl - sl * Dr * vr + sl * sr * (Dr - Dl)) * inv;

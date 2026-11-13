@@ -18,6 +18,9 @@ static struct { unsigned x = 1, y = 1, z = 1; } blockDim, gridDim;
 #include "srhd.cu"
 #include "srhd_d.cuh"
 #include "srhd_b.cuh"
+#include "cooling.cu"
+#include "cooling_b.cuh"
+#include "cooling_d.cuh"
 
 typedef std::vector<double> Vec;
 
@@ -52,6 +55,90 @@ static void c2p(int solver, const double *U, double *P, const double *g, int n) 
 }
 static void c2p_b(int solver, const double *U, double *Ub, double *P, double *Pb, const double *g, double *gb, int n) {
   if (solver == 0) c2p_newton_b(U, Ub, P, Pb, g, gb, n); else c2p_bisect_b(U, Ub, P, Pb, g, gb, n);
+}
+
+// Cooling kernel alone: adjoint and tangent, for kernel-level checks.
+extern "C" void cool_apply(int n, const double *P, const double *lam, double dt, double *Pn) {
+  cool_implicit(P, Pn, lam, dt, n);
+}
+extern "C" void cool_adjoint(int n, const double *P, const double *lam, double dt, const double *Pnb_in, double *Pb,
+                             double *lamb) {
+  Vec Pn(3 * n), Pnb(Pnb_in, Pnb_in + 3 * n);
+  cool_implicit_b(P, Pb, Pn.data(), Pnb.data(), lam, lamb, dt, n);
+}
+extern "C" void cool_tangent(int n, const double *P, const double *Pd, const double *lam, const double *lamd, double dt,
+                             double *Pnd) {
+  Vec Pn(3 * n);
+  cool_implicit_d(P, Pd, Pn.data(), Pnd, lam, lamd, dt, 0.0, n);
+}
+
+// The Riemann problem with operator-split implicit cooling after every RK2 step:
+// U_{s+1} = p2c(cool(c2p(RK2(U_s)))). q = Riemann data (7), lam = (L0, alpha). J = 0.5 dx sum (rho - obs)^2.
+// grad (9 values: dJ/dq, dJ/dlam) by the adjoint when grad != 0.
+extern "C" double srhd_cool_misfit(const double *q, const double *lamh, int n, int steps, double cfl, int solver,
+                                   const double *obs, double *grad, double *rho_out) {
+  const double dx = 1.0 / n, dt = cfl * dx;
+  const double g[1] = {q[6]};
+  const double lam[2] = {lamh[0], lamh[1]};
+  Vec W0, W(3 * n), F(3 * (n + 1)), P(3 * n), Pc(3 * n);
+  initial(q, n, W0);
+  std::vector<Vec> Us(steps + 1, Vec(3 * n)), U1s(steps, Vec(3 * n)), U2s(steps, Vec(3 * n));
+  p2c(W0.data(), Us[0].data(), g, n);
+  for (int s = 0; s < steps; ++s) {
+    c2p(solver, Us[s].data(), W.data(), g, n);
+    hll_flux(W.data(), F.data(), g, n);
+    rk_stage(Us[s].data(), Us[s].data(), F.data(), U1s[s].data(), 0.0, 1.0, cfl, n);
+    c2p(solver, U1s[s].data(), W.data(), g, n);
+    hll_flux(W.data(), F.data(), g, n);
+    rk_stage(Us[s].data(), U1s[s].data(), F.data(), U2s[s].data(), 0.5, 0.5, cfl, n);
+    c2p(solver, U2s[s].data(), W.data(), g, n);
+    cool_implicit(W.data(), Pc.data(), lam, dt, n);
+    p2c(Pc.data(), Us[s + 1].data(), g, n);
+  }
+  c2p(solver, Us[steps].data(), P.data(), g, n);
+  double J = 0;
+  for (int i = 0; i < n; ++i) J += 0.5 * dx * (P[i] - obs[i]) * (P[i] - obs[i]);
+  if (rho_out) for (int i = 0; i < n; ++i) rho_out[i] = P[i];
+  if (!grad) return J;
+  double gb[1] = {0}, lamb[2] = {0, 0};
+  Vec Ub(3 * n, 0), Pb(3 * n, 0);
+  for (int i = 0; i < n; ++i) Pb[i] = dx * (P[i] - obs[i]);
+  c2p_b(solver, Us[steps].data(), Ub.data(), P.data(), Pb.data(), g, gb, n);
+  for (int s = steps - 1; s >= 0; --s) {
+    // U_{s+1} = p2c(cool(c2p(U2)))
+    Vec Pcb(3 * n, 0), Wb3(3 * n, 0), U2b(3 * n, 0), Ut(3 * n);
+    c2p(solver, U2s[s].data(), W.data(), g, n);
+    cool_implicit(W.data(), Pc.data(), lam, dt, n);
+    p2c_b(Pc.data(), Pcb.data(), Ut.data(), Ub.data(), g, gb, n);
+    cool_implicit_b(W.data(), Wb3.data(), Pc.data(), Pcb.data(), lam, lamb, dt, n);
+    c2p_b(solver, U2s[s].data(), U2b.data(), W.data(), Wb3.data(), g, gb, n);
+    // U2 = 0.5 U_s + 0.5 (U1 - dtdx dF(W(U1)))
+    Vec U1b(3 * n, 0), U0b(3 * n, 0), Fb(3 * (n + 1), 0), Wb(3 * n, 0), Un(3 * n);
+    c2p(solver, U1s[s].data(), W.data(), g, n);
+    rk_stage_b(Us[s].data(), U0b.data(), U1s[s].data(), U1b.data(), F.data(), Fb.data(), Un.data(), U2b.data(),
+               0.5, 0.5, cfl, n);
+    hll_flux_b(W.data(), Wb.data(), F.data(), Fb.data(), g, gb, n);
+    c2p_b(solver, U1s[s].data(), U1b.data(), W.data(), Wb.data(), g, gb, n);
+    // U1 = U_s - dtdx dF(W(U_s))
+    Vec Wb2(3 * n, 0), Fb2(3 * (n + 1), 0), Usb(3 * n, 0);
+    c2p(solver, Us[s].data(), W.data(), g, n);
+    rk_stage_b(Us[s].data(), Usb.data(), Us[s].data(), Usb.data(), F.data(), Fb2.data(), Un.data(), U1b.data(),
+               0.0, 1.0, cfl, n);
+    hll_flux_b(W.data(), Wb2.data(), F.data(), Fb2.data(), g, gb, n);
+    c2p_b(solver, Us[s].data(), Usb.data(), W.data(), Wb2.data(), g, gb, n);
+    for (int k = 0; k < 3 * n; ++k) Ub[k] = Usb[k] + U0b[k];
+  }
+  Vec W0b(3 * n, 0), U0(3 * n);
+  p2c_b(W0.data(), W0b.data(), U0.data(), Ub.data(), g, gb, n);
+  for (int k = 0; k < 9; ++k) grad[k] = 0;
+  for (int i = 0; i < n; ++i) {
+    bool left = (i + 0.5) / n < 0.5;
+    for (int c = 0; c < 3; ++c) grad[(left ? 0 : 3) + c] += W0b[c * n + i];
+  }
+  grad[6] = gb[0];
+  grad[7] = lamb[0];
+  grad[8] = lamb[1];
+  return J;
 }
 
 // Final-time primitives (used to make synthetic observations).

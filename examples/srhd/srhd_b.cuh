@@ -55,6 +55,22 @@ __global__ void c2p_newton_b(const double * U, double *U_b, double * P, double *
     { // cuad: implicit adjoint of the convergence loop at line 16: l = s + G_x^T l over one iteration, then the inputs get G_p^T l
       double _cuad_s3_p = p_b, _cuad_l3_p = p_b;
       p_b = 0;
+      { // cuad: the loop must have stopped at a fixed point of one iteration
+        double _cuad_f3_p = p;
+        {
+          double v = S / (tau + D + p);
+          double W = 1.0 / sqrt(1.0 - v * v);
+          double rho = D / W;
+          double eps = (tau + D * (1.0 - W) + p * (1.0 - W * W)) / (D * W);
+          double f = (g - 1.0) * rho * eps - p;
+          double cs2 = g * (g - 1.0) * eps / (1.0 + g * eps);
+          double dp = f / (v * v * cs2 - 1.0);
+          p = fmax(p - dp, pmin);
+        }
+        double _cuad_fr = 0, _cuad_fs = 0;
+        _cuad_fr = fmax(_cuad_fr, fabs((double)(p - _cuad_f3_p))); _cuad_fs = fmax(_cuad_fs, fabs((double)_cuad_f3_p)); p = _cuad_f3_p;
+        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs) cuad_solve_fail();
+      }
       int _cuad_ok3 = 0;
       for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {
         double _cuad_n3_p;
@@ -243,6 +259,7 @@ __global__ void c2p_bisect_b(const double * U, double *U_b, double * P, double *
     lo_b += (0.5)*(p_b);
     hi_b += (0.5)*(p_b);
     { // cuad: implicit adjoint of the bracketing loop at line 41: its result is the root of r = (f) - (0) in m; the inputs get -r_p s / r_m
+      if (fmax((double)lo, (double)hi) - fmin((double)lo, (double)hi) > CUAD_SOLVE_TOL * fmax(fabs(fmax((double)lo, (double)hi)), fabs(fmin((double)lo, (double)hi)))) cuad_solve_fail();
       double _cuad_s3 = lo_b + hi_b;
       lo_b = 0;
       hi_b = 0;
@@ -364,15 +381,15 @@ __global__ void hll_flux_b(const double * P, double *P_b, double * F, double *F_
     double hl = 1.0 + g / (g - 1.0) * pl / rl;
     double Dl = rl * Wl, Sl = rl * hl * Wl * Wl * vl, El = rl * hl * Wl * Wl - pl - Dl;
     double c2l = g * pl / (rl * hl);
-    double al = (vl * (1.0 - c2l) - sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))) / (1.0 - vl * vl * c2l);
-    double bl = (vl * (1.0 - c2l) + sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))) / (1.0 - vl * vl * c2l);
+    double al = (vl * (1.0 - c2l) - sqrt(c2l) * (1.0 - vl * vl)) / (1.0 - vl * vl * c2l);
+    double bl = (vl * (1.0 - c2l) + sqrt(c2l) * (1.0 - vl * vl)) / (1.0 - vl * vl * c2l);
     double rr = qR[0], ur = qR[1], pr = qR[2];
     double Wr = sqrt(1.0 + ur * ur), vr = ur / Wr;
     double hr = 1.0 + g / (g - 1.0) * pr / rr;
     double Dr = rr * Wr, Sr = rr * hr * Wr * Wr * vr, Er = rr * hr * Wr * Wr - pr - Dr;
     double c2r = g * pr / (rr * hr);
-    double ar = (vr * (1.0 - c2r) - sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))) / (1.0 - vr * vr * c2r);
-    double br = (vr * (1.0 - c2r) + sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))) / (1.0 - vr * vr * c2r);
+    double ar = (vr * (1.0 - c2r) - sqrt(c2r) * (1.0 - vr * vr)) / (1.0 - vr * vr * c2r);
+    double br = (vr * (1.0 - c2r) + sqrt(c2r) * (1.0 - vr * vr)) / (1.0 - vr * vr * c2r);
     double sl = fmin(0.0, fmin(al, ar)), sr = fmax(0.0, fmax(bl, br));
     double inv = 1.0 / (sr - sl);
     F[f] = (sr * Dl * vl - sl * Dr * vr + sl * sr * (Dr - Dl)) * inv;
@@ -459,26 +476,20 @@ __global__ void hll_flux_b(const double * P, double *P_b, double * F, double *F_
     ar_b += ((al) <= (ar) ? 0 : (((0.0) <= (fmin(al, ar)) ? 0 : (sl_b))));
     vr_b += ((br_b)/((1.0 - vr * vr * c2r)))*((1.0 - c2r));
     c2r_b += -((vr)*((br_b)/((1.0 - vr * vr * c2r))));
-    c2r_b += (((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))*((1.0 - vr * vr * c2r)))*((1.0 - vr * vr));
-    vr_b += (-((c2r)*(((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))*((1.0 - vr * vr * c2r)))))*(vr);
-    vr_b += (vr)*(-((c2r)*(((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))*((1.0 - vr * vr * c2r)))));
-    vr_b += ((-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))))*(c2r))*(vr);
-    vr_b += (vr)*((-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))))*(c2r));
-    c2r_b += (vr * vr)*(-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*((br_b)/((1.0 - vr * vr * c2r))))));
-    vr_b += ((-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r))*(vr);
-    vr_b += (vr)*((-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r));
-    c2r_b += (vr * vr)*(-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))));
+    c2r_b += (1.0/(2.0*sqrt(c2r)))*(((br_b)/((1.0 - vr * vr * c2r)))*((1.0 - vr * vr)));
+    vr_b += (-((sqrt(c2r))*((br_b)/((1.0 - vr * vr * c2r)))))*(vr);
+    vr_b += (vr)*(-((sqrt(c2r))*((br_b)/((1.0 - vr * vr * c2r)))));
+    vr_b += ((-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r))*(vr);
+    vr_b += (vr)*((-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r));
+    c2r_b += (vr * vr)*(-(-((br_b)*((vr * (1.0 - c2r) + sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))));
     vr_b += ((ar_b)/((1.0 - vr * vr * c2r)))*((1.0 - c2r));
     c2r_b += -((vr)*((ar_b)/((1.0 - vr * vr * c2r))));
-    c2r_b += (((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))*((1.0 - vr * vr * c2r)))*((1.0 - vr * vr));
-    vr_b += (-((c2r)*(((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))*((1.0 - vr * vr * c2r)))))*(vr);
-    vr_b += (vr)*(-((c2r)*(((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))*((1.0 - vr * vr * c2r)))));
-    vr_b += ((-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))))*(c2r))*(vr);
-    vr_b += (vr)*((-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))))*(c2r));
-    c2r_b += (vr * vr)*(-((c2r * (1.0 - vr * vr))*((1.0/(2.0*sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r))))*(-((ar_b)/((1.0 - vr * vr * c2r)))))));
-    vr_b += ((-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r))*(vr);
-    vr_b += (vr)*((-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r));
-    c2r_b += (vr * vr)*(-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r * (1.0 - vr * vr) * (1.0 - vr * vr * c2r)))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))));
+    c2r_b += (1.0/(2.0*sqrt(c2r)))*((-((ar_b)/((1.0 - vr * vr * c2r))))*((1.0 - vr * vr)));
+    vr_b += (-((sqrt(c2r))*(-((ar_b)/((1.0 - vr * vr * c2r))))))*(vr);
+    vr_b += (vr)*(-((sqrt(c2r))*(-((ar_b)/((1.0 - vr * vr * c2r))))));
+    vr_b += ((-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r))*(vr);
+    vr_b += (vr)*((-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))))*(c2r));
+    c2r_b += (vr * vr)*(-(-((ar_b)*((vr * (1.0 - c2r) - sqrt(c2r) * (1.0 - vr * vr))))/(((1.0 - vr * vr * c2r))*((1.0 - vr * vr * c2r)))));
     g_b += ((c2r_b)/((rr * hr)))*(pr);
     pr_b += (g)*((c2r_b)/((rr * hr)));
     rr_b += (-((c2r_b)*(g * pr))/(((rr * hr))*((rr * hr))))*(hr);
@@ -509,26 +520,20 @@ __global__ void hll_flux_b(const double * P, double *P_b, double * F, double *F_
     qR_b[0] += rr_b;
     vl_b += ((bl_b)/((1.0 - vl * vl * c2l)))*((1.0 - c2l));
     c2l_b += -((vl)*((bl_b)/((1.0 - vl * vl * c2l))));
-    c2l_b += (((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))*((1.0 - vl * vl * c2l)))*((1.0 - vl * vl));
-    vl_b += (-((c2l)*(((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))*((1.0 - vl * vl * c2l)))))*(vl);
-    vl_b += (vl)*(-((c2l)*(((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))*((1.0 - vl * vl * c2l)))));
-    vl_b += ((-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))))*(c2l))*(vl);
-    vl_b += (vl)*((-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))))*(c2l));
-    c2l_b += (vl * vl)*(-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*((bl_b)/((1.0 - vl * vl * c2l))))));
-    vl_b += ((-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l))*(vl);
-    vl_b += (vl)*((-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l));
-    c2l_b += (vl * vl)*(-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))));
+    c2l_b += (1.0/(2.0*sqrt(c2l)))*(((bl_b)/((1.0 - vl * vl * c2l)))*((1.0 - vl * vl)));
+    vl_b += (-((sqrt(c2l))*((bl_b)/((1.0 - vl * vl * c2l)))))*(vl);
+    vl_b += (vl)*(-((sqrt(c2l))*((bl_b)/((1.0 - vl * vl * c2l)))));
+    vl_b += ((-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l))*(vl);
+    vl_b += (vl)*((-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l));
+    c2l_b += (vl * vl)*(-(-((bl_b)*((vl * (1.0 - c2l) + sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))));
     vl_b += ((al_b)/((1.0 - vl * vl * c2l)))*((1.0 - c2l));
     c2l_b += -((vl)*((al_b)/((1.0 - vl * vl * c2l))));
-    c2l_b += (((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))*((1.0 - vl * vl * c2l)))*((1.0 - vl * vl));
-    vl_b += (-((c2l)*(((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))*((1.0 - vl * vl * c2l)))))*(vl);
-    vl_b += (vl)*(-((c2l)*(((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))*((1.0 - vl * vl * c2l)))));
-    vl_b += ((-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))))*(c2l))*(vl);
-    vl_b += (vl)*((-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))))*(c2l));
-    c2l_b += (vl * vl)*(-((c2l * (1.0 - vl * vl))*((1.0/(2.0*sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l))))*(-((al_b)/((1.0 - vl * vl * c2l)))))));
-    vl_b += ((-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l))*(vl);
-    vl_b += (vl)*((-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l));
-    c2l_b += (vl * vl)*(-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l * (1.0 - vl * vl) * (1.0 - vl * vl * c2l)))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))));
+    c2l_b += (1.0/(2.0*sqrt(c2l)))*((-((al_b)/((1.0 - vl * vl * c2l))))*((1.0 - vl * vl)));
+    vl_b += (-((sqrt(c2l))*(-((al_b)/((1.0 - vl * vl * c2l))))))*(vl);
+    vl_b += (vl)*(-((sqrt(c2l))*(-((al_b)/((1.0 - vl * vl * c2l))))));
+    vl_b += ((-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l))*(vl);
+    vl_b += (vl)*((-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))))*(c2l));
+    c2l_b += (vl * vl)*(-(-((al_b)*((vl * (1.0 - c2l) - sqrt(c2l) * (1.0 - vl * vl))))/(((1.0 - vl * vl * c2l))*((1.0 - vl * vl * c2l)))));
     g_b += ((c2l_b)/((rl * hl)))*(pl);
     pl_b += (g)*((c2l_b)/((rl * hl)));
     rl_b += (-((c2l_b)*(g * pl))/(((rl * hl))*((rl * hl))))*(hl);
