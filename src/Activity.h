@@ -72,10 +72,58 @@ class Activity {
     return false;
   }
 
+  static bool exitsWithBreak(const Stmt *s) {
+    if (!s)
+      return false;
+    if (isa<BreakStmt>(s))
+      return true;
+    if (isa<ForStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s))
+      return false;
+    for (const Stmt *c : s->children())
+      if (exitsWithBreak(c))
+        return true;
+    return false;
+  }
+  bool branchVaried(const Stmt *s) const {
+    if (!s)
+      return false;
+    if (const auto *is = dyn_cast<IfStmt>(s))
+      if (refsVaried(is->getCond()))
+        return true;
+    for (const Stmt *c : s->children())
+      if (branchVaried(c))
+        return true;
+    return false;
+  }
+  void assignedScalars(const Stmt *s, std::set<const ValueDecl *> &out) const {
+    if (!s)
+      return;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+          if (d->getDecl()->getType()->isRealFloatingType())
+            out.insert(d->getDecl());
+    for (const Stmt *c : s->children())
+      assignedScalars(c, out);
+  }
+
   bool step(const Stmt *s) {
     if (!s)
       return false;
     bool changed = false;
+    // Control dependence of a loop that runs to convergence (it leaves with `break` under a branch that
+    // reads a varied value, e.g. a bisection): what it refines converges to a function of the inputs even
+    // when every assignment copies values computed from constants.
+    if (const auto *fs = dyn_cast<ForStmt>(s))
+      if (exitsWithBreak(fs->getBody()) && branchVaried(fs->getBody())) {
+        std::set<const ValueDecl *> as;
+        assignedScalars(fs->getBody(), as);
+        for (const ValueDecl *v : as)
+          if (!varied_.count(v)) {
+            varied_.insert(v);
+            changed = true;
+          }
+      }
     if (const auto *ds = dyn_cast<DeclStmt>(s)) {
       for (const Decl *d : ds->decls())
         if (const auto *vd = dyn_cast<VarDecl>(d))

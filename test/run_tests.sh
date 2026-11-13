@@ -54,6 +54,20 @@ g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/ver
 test/out/verify_carried || fail=1
 
 echo
+echo "=== CONVERGENCE LOOPS (Newton, fixed point, 2-D Newton, bisection): implicit adjoint vs FD, ASan ==="
+"$CUAD" -r test/reverse_only/bracketing.cu > test/out/bracketing_b.cuh
+if "$CUAD" test/reverse_only/bracketing.cu > /dev/null 2> test/out/bracketing_fwd.err; then
+  echo "  [FAIL] forward mode accepted a bracketing loop"; fail=1
+else
+  n=$(grep -c "error: cuad (forward mode) cannot differentiate a loop that exits with" test/out/bracketing_fwd.err || true)
+  ok=FAIL; [ "$n" -eq 2 ] && ok=PASS
+  echo "  forward mode rejects the bracketing loops: $n located errors (expected 2)  [$ok]"
+  [ "$ok" = PASS ] || fail=1
+fi
+g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/verify_convergence.cpp -o test/out/verify_convergence
+test/out/verify_convergence || fail=1
+
+echo
 echo "=== GLOBAL TAPE (-DCUAD_GLOBAL_TAPE): concurrent threads on one tape, nested frames, bounds; ASan ==="
 g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -pthread -Itest test/verify_global_tape.cpp -o test/out/verify_global_tape
 test/out/verify_global_tape || fail=1

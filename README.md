@@ -130,6 +130,15 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   thread-local arrays and scalars use plain `+=`.
 - **Loops**: grid-stride loops, loops with local declarations (recomputed per
   iteration in the reverse sweep), `#pragma unroll`, early exits (`continue`, `return`).
+- **Convergence loops (reverse mode)**: a `for` loop that iterates floating locals until
+  `if (c) break;` (a Newton or fixed-point solve, a bisection) is differentiated at its
+  converged point instead of iteration by iteration, and nothing is stored per iteration.
+  A smooth update x <- G(x, p) gets the adjoint l = s + G_x^T l (iterated with the reverse of
+  one iteration, Christianson's method) and then p_b += G_p^T l. A bracketing update, where
+  the inputs reach the bracket only through the branch `if (r(m) > 0) lo = m; else hi = m;`,
+  gets p_b -= r_p s / r_m: differentiating its iterations would give the derivative of the
+  initial bracket, not of the root. Loops that change memory, call user functions or nest
+  other loops are rejected.
 - **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator
   statements, bare `{ ... }` blocks.
@@ -158,7 +167,10 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
 - Integer locals are not taped: give a reassigned integer local a new variable for each
   value it takes.
 - Not supported in reverse mode: `while`, `do` and `switch` statements and `for` loops
-  that exit with `break`, when they touch active data. Lambdas and straight-line
+  that exit with `break` other than the convergence loops above, when they touch active data.
+  A convergence loop is assumed to have converged: its adjoint is that of the solution of
+  the equation it solves (the iteration for l traps if it does not converge). Forward mode
+  differentiates smooth convergence loops iteration by iteration and rejects bracketing ones. Lambdas and straight-line
   in-place updates of a local-array element that an earlier statement also reads are
   not supported in either mode.
 - **Unsupported constructs are rejected.** CuAD reports each one as

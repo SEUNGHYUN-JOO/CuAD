@@ -28,6 +28,8 @@
 #include "clang/AST/Stmt.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
+#include <functional>
+#include <set>
 #include <string>
 
 namespace cuad {
@@ -112,6 +114,110 @@ private:
 
   std::string src(SourceRange r) const {
     return Lexer::getSourceText(CharSourceRange::getTokenRange(r), SM, LO).str();
+  }
+
+  // A loop that leaves with `break` and assigns floating variables declared before it, none of them from a
+  // value that depends on the active inputs by data flow within one iteration, while a branch condition
+  // in it does (a bisection). Its result converges to a function of the inputs, but the tangent of its
+  // iterations only carries the tangent of the starting values.
+  static bool fwdHasBreak(const Stmt *s) {
+    if (!s)
+      return false;
+    if (isa<BreakStmt>(s))
+      return true;
+    if (isa<ForStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s))
+      return false;
+    for (const Stmt *c : s->children())
+      if (fwdHasBreak(c))
+        return true;
+    return false;
+  }
+  static void fwdRefs(const Stmt *s, std::set<const VarDecl *> &out) {
+    if (!s)
+      return;
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+        out.insert(vd);
+    for (const Stmt *c : s->children())
+      fwdRefs(c, out);
+  }
+  static bool fwdMentions(const Stmt *s, const std::set<const VarDecl *> &vs) {
+    std::set<const VarDecl *> r;
+    fwdRefs(s, r);
+    for (const VarDecl *v : r)
+      if (vs.count(v))
+        return true;
+    return false;
+  }
+  bool controlOnlyLoop(const ForStmt *fs) const {
+    if (!fs->getBody() || !fwdHasBreak(fs->getBody()))
+      return false;
+    std::set<const VarDecl *> inner, outerAssigned, dep, refs;
+    std::function<void(const Stmt *)> decls = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *ds = dyn_cast<DeclStmt>(s))
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            inner.insert(vd);
+      for (const Stmt *c : s->children())
+        decls(c);
+    };
+    decls(fs->getBody());
+    decls(fs->getInit());
+    fwdRefs(fs->getBody(), refs);
+    std::function<void(const Stmt *)> assigned = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp())
+          if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+            if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+              if (!inner.count(vd) && vd->getType()->isRealFloatingType())
+                outerAssigned.insert(vd);
+      for (const Stmt *c : s->children())
+        assigned(c);
+    };
+    assigned(fs->getBody());
+    if (outerAssigned.empty())
+      return false;
+    for (const VarDecl *vd : refs)
+      if (!inner.count(vd) && !outerAssigned.count(vd) && Act.isVaried(vd))
+        dep.insert(vd);
+    bool stateDep = false, condDep = false;
+    std::function<void(const Stmt *)> flow = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *ds = dyn_cast<DeclStmt>(s)) {
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            if (vd->hasInit() && fwdMentions(vd->getInit(), dep))
+              dep.insert(vd);
+        return;
+      }
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp()) {
+          if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+            if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+              if (fwdMentions(bo->getRHS(), dep) || (bo->isCompoundAssignmentOp() && dep.count(vd))) {
+                dep.insert(vd);
+                if (outerAssigned.count(vd))
+                  stateDep = true;
+              }
+          return;
+        }
+      if (const auto *is = dyn_cast<IfStmt>(s)) {
+        if (fwdMentions(is->getCond(), dep))
+          condDep = true;
+        flow(is->getThen());
+        flow(is->getElse());
+        return;
+      }
+      for (const Stmt *c : s->children())
+        flow(c);
+    };
+    flow(fs->getBody());
+    return !stateDep && condDep;
   }
   std::string prim(const Expr *e) const { return src(e->getSourceRange()); }
 
@@ -512,6 +618,12 @@ private:
         return genAssign(bo, ind);
 
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
+      if (controlOnlyLoop(fs))
+        unsupported(fs->getBeginLoc(),
+                    "a loop that exits with `break` and refines floating variables that reach the active inputs only "
+                    "through its branch conditions (a bracketing root solve: the tangent of its iterations is the "
+                    "tangent of the initial bracket, not of the root; reverse mode differentiates it implicitly)",
+                    "");
       std::string init = fs->getInit() ? src(fs->getInit()->getSourceRange()) : "";
       if (!init.empty() && init.back() == ';') // normalize: we re-add the ';'
         init.pop_back();
@@ -627,6 +739,32 @@ private:
     if (!raw.empty() && raw.back() == ';') // DeclStmt range may include the ';'
       raw.pop_back();
     bool isShared = raw.find("__shared__") != std::string::npos;
+    // `double W = sqrt(1 + u*u), v = u / W;` - a later declarator may read an earlier one, so all tangents
+    // ahead of the whole statement read W before it exists. Scalar declarators are split, each tangent just
+    // before its own primal.
+    if (!ds->isSingleDecl() && !isShared) {
+      bool scalars = true;
+      for (const Decl *d : ds->decls()) {
+        const auto *vd = dyn_cast<VarDecl>(d);
+        if (!vd || Ctx.getAsConstantArrayType(vd->getType()))
+          scalars = false;
+      }
+      if (scalars) {
+        std::string out;
+        for (const Decl *d : ds->decls()) {
+          const auto *vd = cast<VarDecl>(d);
+          std::string nm = vd->getNameAsString(), ts = tstr(vd->getType());
+          if (Act.isVaried(vd)) {
+            if (vd->getType().getCanonicalType()->isPointerType())
+              out += ind + ts + " " + nm + "_d" + (vd->hasInit() ? " = " + diffPtr(vd->getInit()) : "") + ";\n";
+            else
+              out += ind + ts + " " + nm + "_d" + (vd->hasInit() ? " = " + diff(vd->getInit()) : "") + ";\n";
+          }
+          out += ind + ts + " " + nm + (vd->hasInit() ? " = " + prim(vd->getInit()) : "") + ";\n";
+        }
+        return out;
+      }
+    }
     std::string dots;
     for (const Decl *d : ds->decls()) {
       const auto *vd = dyn_cast<VarDecl>(d);

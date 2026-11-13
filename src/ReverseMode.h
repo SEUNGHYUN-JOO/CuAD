@@ -1370,7 +1370,348 @@ private:
   }
   // a loop whose backward sweep re-runs each iteration's primal before reversing it
   bool isRecompute(const ForStmt *fs) const {
+    if (solveInfo(fs).ok)
+      return false;
     return loopHasActiveLocals(fs->getBody()) || !checkpointedArrays(fs).empty();
+  }
+
+  // ---------------- convergence loops: implicit adjoint ----------------
+  // A counted loop that leaves with `if (c) break;` and iterates floating locals to convergence (a root
+  // solve, a fixed-point iteration) is not reversed iteration by iteration. Its result is taken to be the
+  // converged point, which depends on the inputs only through the equation that the loop solves:
+  //  - smooth update (some state assignment depends on the inputs): x* = G(x*, p). The adjoint
+  //    l = s + G_x^T l is iterated with the reverse of one iteration, then p_b += G_p^T l (Christianson);
+  //  - bracketing update (the inputs reach the state only through the branch that decides which bound the
+  //    trial point m replaces): differentiating the iterations gives a derivative through the initial
+  //    bracket only, which is wrong. x* is the root of the branch condition r(m, p) and p_b -= r_p s / r_m.
+  // The forward sweep runs the loop as written and stores nothing per iteration.
+  struct SolveInfo {
+    bool ok = false, bracket = false;
+    std::string why;                         // why a loop with `break` is not a convergence loop
+    std::vector<const Stmt *> iter;          // the body without its `if (c) break;` statements
+    std::vector<const VarDecl *> state, params;
+    const IfStmt *sel = nullptr;             // bracketing: the branch that moves a bound
+    const VarDecl *trial = nullptr;          // bracketing: the trial point that both arms assign
+  };
+  mutable std::map<const ForStmt *, SolveInfo> solve_;
+
+  static bool isBreakIf(const Stmt *s) {
+    const auto *is = dyn_cast<IfStmt>(s);
+    if (!is || is->getElse())
+      return false;
+    const Stmt *t = is->getThen();
+    if (const auto *cs = dyn_cast<CompoundStmt>(t))
+      return cs->size() == 1 && isa<BreakStmt>(cs->body_front());
+    return isa<BreakStmt>(t);
+  }
+  static void solveDecls(const Stmt *s, std::set<const VarDecl *> &out) {
+    if (!s)
+      return;
+    if (const auto *ds = dyn_cast<DeclStmt>(s))
+      for (const Decl *d : ds->decls())
+        if (const auto *vd = dyn_cast<VarDecl>(d))
+          out.insert(vd);
+    for (const Stmt *c : s->children())
+      solveDecls(c, out);
+  }
+  static void solveRefs(const Stmt *s, std::set<const VarDecl *> &out) {
+    if (!s)
+      return;
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+        out.insert(vd);
+    for (const Stmt *c : s->children())
+      solveRefs(c, out);
+  }
+  static bool mentionsAny(const Stmt *s, const std::set<const VarDecl *> &vs) {
+    std::set<const VarDecl *> r;
+    solveRefs(s, r);
+    for (const VarDecl *v : r)
+      if (vs.count(v))
+        return true;
+    return false;
+  }
+  static bool isFloatScalar(const VarDecl *vd) {
+    QualType t = vd->getType().getNonReferenceType();
+    return t->isRealFloatingType();
+  }
+
+  const SolveInfo &solveInfo(const ForStmt *fs) const {
+    auto it = solve_.find(fs);
+    if (it != solve_.end())
+      return it->second;
+    SolveInfo &si = solve_[fs];
+    if (!fs->getBody() || !containsBreak(fs->getBody()) || !hasActive(fs->getBody()))
+      return si; // not a convergence loop (why stays empty)
+    si.why = analyseSolve(fs, si);
+    si.ok = si.why.empty();
+    return si;
+  }
+
+  std::string analyseSolve(const ForStmt *fs, SolveInfo &si) const {
+    std::vector<const Stmt *> top;
+    if (const auto *cs = dyn_cast<CompoundStmt>(fs->getBody()))
+      top.assign(cs->body_begin(), cs->body_end());
+    else
+      top.push_back(fs->getBody());
+    std::set<const VarDecl *> inner;
+    solveDecls(fs->getBody(), inner);
+    solveDecls(fs->getInit(), inner);
+    bool exits = false;
+    for (const Stmt *s0 : top) {
+      const Stmt *s = unwrapAttr(s0);
+      if (isBreakIf(s)) {
+        exits = true;
+        continue;
+      }
+      if (containsBreak(s))
+        return "its `break` is not a top-level `if (c) break;`";
+      si.iter.push_back(s);
+    }
+    if (!exits)
+      return "it has no top-level `if (c) break;`";
+    std::string bad;
+    std::set<const VarDecl *> assigned;
+    std::function<void(const Stmt *)> walk = [&](const Stmt *s) {
+      if (!s || !bad.empty())
+        return;
+      if (isa<ForStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s) || isa<ReturnStmt>(s) ||
+          isa<ContinueStmt>(s) || isa<GotoStmt>(s)) {
+        bad = "it contains a nested loop or another jump";
+        return;
+      }
+      const Expr *lhs = nullptr;
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp())
+          lhs = bo->getLHS();
+      if (const auto *uo = dyn_cast<UnaryOperator>(s))
+        if (uo->isIncrementDecrementOp())
+          lhs = uo->getSubExpr();
+      if (lhs) {
+        const auto *d = dyn_cast<DeclRefExpr>(lhs->IgnoreParenImpCasts());
+        const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr;
+        if (!vd) {
+          bad = "it writes memory (only scalar locals may change inside the loop)";
+          return;
+        }
+        if (!inner.count(vd)) {
+          if (!isFloatScalar(vd)) {
+            bad = "it changes the outer non-floating variable `" + vd->getNameAsString() + "`";
+            return;
+          }
+          assigned.insert(vd);
+        }
+      }
+      if (const auto *ce = dyn_cast<CallExpr>(s))
+        if (isUserDiffFn(calleeOf(ce))) {
+          bad = "it calls the user function `" + calleeOf(ce)->getNameAsString() + "`";
+          return;
+        }
+      if (const auto *as = dyn_cast<ArraySubscriptExpr>(s))
+        if (hasActive(as->getBase())) {
+          bad = "it reads an active array (copy the element into a local before the loop)";
+          return;
+        }
+      for (const Stmt *c : s->children())
+        walk(c);
+    };
+    for (const Stmt *s : si.iter)
+      walk(s);
+    if (!bad.empty())
+      return bad;
+    si.state.assign(assigned.begin(), assigned.end());
+    if (si.state.empty())
+      return "it iterates no floating local declared before it";
+    std::set<const VarDecl *> refs;
+    for (const Stmt *s : si.iter)
+      solveRefs(s, refs);
+    std::set<const VarDecl *> params;
+    for (const VarDecl *vd : refs) {
+      if (inner.count(vd) || assigned.count(vd) || !Act.isVaried(vd))
+        continue;
+      if (!isFloatScalar(vd) || !vd->isLocalVarDeclOrParm())
+        return "it reads the active non-scalar `" + vd->getNameAsString() + "` (copy what it needs into locals)";
+      params.insert(vd);
+    }
+    si.params.assign(params.begin(), params.end());
+    // which values computed in one iteration depend on the inputs by data flow (branch conditions ignored)
+    std::set<const VarDecl *> dep(params.begin(), params.end());
+    std::function<void(const Stmt *)> flow = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *ds = dyn_cast<DeclStmt>(s)) {
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            if (vd->hasInit() && mentionsAny(vd->getInit(), dep))
+              dep.insert(vd);
+        return;
+      }
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp()) {
+          const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+          if (const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr)
+            if (mentionsAny(bo->getRHS(), dep) || (bo->isCompoundAssignmentOp() && dep.count(vd)))
+              dep.insert(vd);
+          return;
+        }
+      if (const auto *is = dyn_cast<IfStmt>(s)) {
+        flow(is->getThen());
+        flow(is->getElse());
+        return;
+      }
+      for (const Stmt *c : s->children())
+        flow(c);
+    };
+    for (const Stmt *s : si.iter)
+      flow(s);
+    bool smooth = false;
+    for (const VarDecl *v : si.state)
+      if (dep.count(v))
+        smooth = true;
+    if (smooth)
+      return "";
+    // bracketing: one if/else whose arms only assign the same trial local to state variables
+    si.bracket = true;
+    std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), seen;
+    for (const Stmt *s : si.iter) {
+      std::set<const VarDecl *> r;
+      const auto *is = dyn_cast<IfStmt>(s);
+      if (!is) {
+        if (!isa<DeclStmt>(s))
+          return "its bracketing update is not of the form `if (r(m) > 0) a = m; else b = m;`";
+        continue;
+      }
+      if (si.sel || !is->getElse())
+        return "its bracketing update is not a single if/else";
+      si.sel = is;
+      for (const Stmt *arm : {is->getThen(), is->getElse()}) {
+        std::vector<const Stmt *> as;
+        if (const auto *cs = dyn_cast<CompoundStmt>(arm))
+          as.assign(cs->body_begin(), cs->body_end());
+        else
+          as.push_back(arm);
+        for (const Stmt *a : as) {
+          const auto *bo = dyn_cast<BinaryOperator>(a);
+          const auto *l = bo && bo->getOpcode() == BO_Assign ? dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()) : nullptr;
+          const auto *r2 = bo ? dyn_cast<DeclRefExpr>(bo->getRHS()->IgnoreParenImpCasts()) : nullptr;
+          const auto *lv = l ? dyn_cast<VarDecl>(l->getDecl()) : nullptr;
+          const auto *rv = r2 ? dyn_cast<VarDecl>(r2->getDecl()) : nullptr;
+          if (!lv || !rv || !stateSet.count(lv) || !inner.count(rv) || (si.trial && si.trial != rv))
+            return "an arm of its bracketing branch does other than assign one trial point to a bound";
+          si.trial = rv;
+          seen.insert(lv);
+        }
+      }
+      const auto *cmp = dyn_cast<BinaryOperator>(is->getCond()->IgnoreParenImpCasts());
+      if (!cmp || !cmp->isRelationalOp() || !mentionsAny(cmp, dep))
+        return "its bracketing condition is not a comparison that depends on the inputs";
+    }
+    if (!si.sel || !si.trial || seen.size() != stateSet.size())
+      return "its bracketing branch does not move every iterated variable";
+    // the trial point is computed from the bracket alone, first; the residual only from it and the inputs
+    const auto *first = dyn_cast<DeclStmt>(si.iter.front());
+    if (!first || !first->isSingleDecl() || first->getSingleDecl() != si.trial || dep.count(si.trial))
+      return "its trial point is not the first statement, computed from the bracket alone";
+    for (size_t i = 1; i < si.iter.size(); ++i)
+      if (si.iter[i] != si.sel && mentionsAny(si.iter[i], stateSet))
+        return "its residual reads the bracket other than through the trial point";
+    return "";
+  }
+
+  // declarations `T x_b = 0;` that hide the given adjoints inside a block
+  std::string shadowAdj(const std::vector<const VarDecl *> &vs, const std::string &ind) const {
+    std::string out;
+    for (const VarDecl *v : vs)
+      out += ind + tstr(v->getType().getNonReferenceType().getUnqualifiedType()) + " " + v->getNameAsString() +
+             "_b = 0;\n";
+    return out;
+  }
+
+  std::string solveAdjoint(const ForStmt *fs, const SolveInfo &si, int depth) const {
+    const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
+    const std::string id = std::to_string(tmp_++);
+    const std::string line = std::to_string(SM.getSpellingLineNumber(fs->getBeginLoc()));
+    auto T = [&](const VarDecl *v) { return tstr(v->getType().getNonReferenceType().getUnqualifiedType()); };
+    bool saved = noPush_;
+    noPush_ = false; // one iteration's primal must push what its own reverse pops
+    std::string out;
+    if (!si.bracket) {
+      out += ind + "{ // cuad: implicit adjoint of the convergence loop at line " + line +
+             ": l = s + G_x^T l over one iteration, then the inputs get G_p^T l\n";
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString();
+        out += i1 + T(v) + " _cuad_s" + id + "_" + x + " = " + x + "_b, _cuad_l" + id + "_" + x + " = " + x + "_b;\n";
+        out += i1 + x + "_b = 0;\n";
+      }
+      out += i1 + "int _cuad_ok" + id + " = 0;\n";
+      out += i1 + "for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {\n";
+      for (const VarDecl *v : si.state)
+        out += i2 + T(v) + " _cuad_n" + id + "_" + v->getNameAsString() + ";\n";
+      out += i2 + "{\n" + shadowAdj(si.params, i3);
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString();
+        out += i3 + T(v) + " " + x + "_b = _cuad_l" + id + "_" + x + ";\n";
+      }
+      out += genBlock(si.iter, depth + 3);
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString();
+        out += i3 + "_cuad_n" + id + "_" + x + " = _cuad_s" + id + "_" + x + " + " + x + "_b;\n";
+      }
+      out += i2 + "}\n" + i2 + "double _cuad_d = 0, _cuad_m = 0;\n";
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString(), n = "_cuad_n" + id + "_" + x, l = "_cuad_l" + id + "_" + x;
+        out += i2 + "_cuad_d = fmax(_cuad_d, fabs((double)(" + n + " - " + l + "))); _cuad_m = fmax(_cuad_m, fabs((double)" +
+               n + ")); " + l + " = " + n + ";\n";
+      }
+      out += i2 + "if (_cuad_d <= 1e-14 * _cuad_m) { _cuad_ok" + id + " = 1; break; }\n" + i1 + "}\n";
+      out += i1 + "if (!_cuad_ok" + id + ") cuad_solve_fail();\n" + i1 + "{\n";
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString();
+        out += i2 + T(v) + " " + x + "_b = _cuad_l" + id + "_" + x + ";\n";
+      }
+      out += genBlock(si.iter, depth + 2) + i1 + "}\n" + ind + "}\n";
+      noPush_ = saved;
+      return out;
+    }
+    // bracketing
+    const auto *cmp = cast<BinaryOperator>(si.sel->getCond()->IgnoreParenImpCasts());
+    const std::string m = si.trial->getNameAsString(), Tm = T(si.trial);
+    out += ind + "{ // cuad: implicit adjoint of the bracketing loop at line " + line + ": its result is the root of r = (" +
+           prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) + ") in " + m + "; the inputs get -r_p s / r_" + m + "\n";
+    std::string sum;
+    for (const VarDecl *v : si.state)
+      sum += (sum.empty() ? "" : " + ") + v->getNameAsString() + "_b";
+    out += i1 + Tm + " _cuad_s" + id + " = " + sum + ";\n";
+    for (const VarDecl *v : si.state)
+      out += i1 + v->getNameAsString() + "_b = 0;\n";
+    std::vector<const VarDecl *> locals;
+    for (const Stmt *s : si.iter)
+      if (s != si.sel) {
+        out += genPrimal(s, depth + 1);
+        if (const auto *ds = dyn_cast<DeclStmt>(s))
+          for (const Decl *d : ds->decls())
+            if (const auto *vd = dyn_cast<VarDecl>(d))
+              if (Act.isVaried(vd) && isFloatScalar(vd))
+                locals.push_back(vd);
+      }
+    auto residualReverse = [&](const std::string &seed, const std::string &in, int dep) {
+      std::string o;
+      for (const VarDecl *v : locals)
+        o += in + v->getNameAsString() + "_b = 0;\n";
+      pushAdj(cmp->getLHS(), seed, o, in);
+      pushAdj(cmp->getRHS(), "-(" + seed + ")", o, in);
+      for (size_t i = si.iter.size(); i-- > 1;)
+        if (si.iter[i] != si.sel)
+          o += reverseStmt(si.iter[i], dep);
+      return o;
+    };
+    out += shadowAdj(locals, i1);
+    out += i1 + Tm + " _cuad_r" + id + ";\n" + i1 + "{\n" + shadowAdj(si.params, i2) + residualReverse("1", i2, depth + 2) +
+           i2 + "_cuad_r" + id + " = " + m + "_b;\n" + i1 + "}\n";
+    out += residualReverse("-(_cuad_s" + id + ") / (_cuad_r" + id + ")", i1, depth + 1);
+    out += ind + "}\n";
+    noPush_ = saved;
+    return out;
   }
   // the element count of a (possibly multi-dimensional) local array and an lvalue for its flat element k
   uint64_t arrayCount(const VarDecl *vd, QualType &elem) const {
@@ -1812,6 +2153,9 @@ private:
       if (!noPush_ && !reusedOutArgs(ce).empty())
         return tapePushCall(ce, ind) + primalLine(s, ind);
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
+      // a convergence loop runs as written and stores nothing (its reverse starts from the converged point)
+      if (solveInfo(fs).ok)
+        return ind + src(fs->getSourceRange()) + (isa<CompoundStmt>(fs->getBody()) ? "\n" : ";\n");
       std::string init =
           fs->getInit() ? src(fs->getInit()->getSourceRange()) : "";
       if (!init.empty() && init.back() == ';')
@@ -1989,9 +2333,14 @@ private:
         return reverseAssign(bo, depth);
 
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
+      const SolveInfo &si = solveInfo(fs);
+      if (si.ok)
+        return solveAdjoint(fs, si, depth);
       if (containsBreak(fs->getBody()) && hasActive(fs->getBody()))
         unsupported(fs->getBeginLoc(), "a loop that exits with `break` (its trip count is not known "
-                                       "when the loop is reversed)");
+                                       "when the loop is reversed" +
+                                           (si.why.empty() ? std::string(")")
+                                                           : "; not a convergence loop: " + si.why + ")"));
       bool recompute = isRecompute(fs);
       std::string hdr;
       if (!reverseForHeader(fs, hdr)) {

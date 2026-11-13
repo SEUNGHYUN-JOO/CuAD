@@ -160,6 +160,16 @@ static inline void cuad_tape_free() {
 }
 #endif
 #endif
+
+// Implicit adjoint of a convergence loop (ReverseMode.h): the iteration l = s + G_x^T l must converge
+// within CUAD_SOLVE_MAXIT steps; if it does not (one iteration is not a contraction at the converged
+// point), trap rather than return a wrong derivative.
+#ifndef CUAD_SOLVE_MAXIT
+#define CUAD_SOLVE_MAXIT 200
+#endif
+#define cuad_solve_fail() cuad_tape_fail()
+
+// Bounds of the element ranges that a loop's per-iteration checkpoint saves (see ReverseMode.h).
 static inline CUAD_HD long long cuad_imin(long long a, long long b) { return a < b ? a : b; }
 static inline CUAD_HD long long cuad_imax(long long a, long long b) { return a > b ? a : b; }
 
