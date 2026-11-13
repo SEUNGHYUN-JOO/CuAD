@@ -1,5 +1,5 @@
 // Loops of the convergence-loop form (`for` + `if (c) break;`, floating locals iterated) that do NOT stop at a fixed
-// point. Reverse mode recognises their form statically, so the implicit adjoint must refuse them at run time: one more
+// point. Reverse mode recognizes their form statically, so the implicit adjoint must refuse them at run time: one more
 // iteration from the exit state moves it (test/verify_solve_policy.cpp expects a trap from each `_b`). Also a bisection
 // whose root lies outside its bracket: it converges to a bound, and the adjoint must be that bound's derivative.
 // x = (a, ...), y[0] = result.

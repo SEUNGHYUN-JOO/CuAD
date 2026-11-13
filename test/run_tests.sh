@@ -74,6 +74,12 @@ g++ -O2 -std=c++17 -Itest test/verify_rootfinders.cpp -o test/out/verify_rootfin
 test/out/verify_rootfinders || fail=1
 
 echo
+echo "=== RESIDUAL CHOICE: ambiguous candidates and accidental zeros trap, algebraic variants agree ==="
+"$CUAD" -r test/reverse_only/residual_choice.cu > test/out/residual_choice_b.cuh
+g++ -O2 -std=c++17 -Itest test/verify_residual_choice.cpp -o test/out/verify_residual_choice
+test/out/verify_residual_choice || fail=1
+
+echo
 echo "=== CONVERGENCE-LOOP POLICY: loops that stop away from a fixed point trap; non-solve loops are rejected ==="
 "$CUAD" -r test/reverse_only/solve_policy.cu > test/out/solve_policy_b.cuh
 g++ -O2 -std=c++17 -Itest test/verify_solve_policy.cpp -o test/out/verify_solve_policy

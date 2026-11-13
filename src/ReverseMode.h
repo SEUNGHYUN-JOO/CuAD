@@ -314,7 +314,7 @@ private:
   bool loopHasActiveLocals(const Stmt *s) const {
     if (!s)
       return false;
-    // ANY local declared in the body forces the per-iteration re-materialisation - an
+    // ANY local declared in the body forces the per-iteration re-materialization - an
     // integer index local (`int ip = idx[4 * e + k]`) used by the adjoint statements was otherwise left undeclared
     // in the backward loop
     if (const auto *ds = dyn_cast<DeclStmt>(s))
@@ -1071,7 +1071,7 @@ private:
     }
     return out;
   }
-  // a hoisted declaration's primal: assignments of its initialisers (+ the adjoint pointer's)
+  // a hoisted declaration's primal: assignments of its initializers (+ the adjoint pointer's)
   std::string hoistedPrimal(const DeclStmt *ds, const std::string &ind) const {
     std::string out;
     for (const Decl *d : ds->decls())
@@ -1079,9 +1079,9 @@ private:
         if (vd->hasInit() && !isa<InitListExpr>(vd->getInit()->IgnoreImplicit()))
           out += ind + vd->getNameAsString() + " = " + prim(vd->getInit()) + ";\n";
         else if (vd->hasInit()) {
-          unsupported(vd->getBeginLoc(), "the initialiser list of the branch-local array `" +
+          unsupported(vd->getBeginLoc(), "the initializer list of the branch-local array `" +
                                              vd->getNameAsString() + "`");
-          out += ind + "// TODO(cuad): hoisted array initialiser of " + vd->getNameAsString() + "\n";
+          out += ind + "// TODO(cuad): hoisted array initializer of " + vd->getNameAsString() + "\n";
         }
         if (vd->hasInit() && Act.isVaried(vd) && isFloatPtrType(vd->getType()))
           out += ind + vd->getNameAsString() + "_b = " + adjPtrExpr(vd->getInit()) + ";\n";
@@ -1214,7 +1214,7 @@ private:
         arrayUses(as->getIdx(), u, order);
         return;
       }
-      if (isa<ArraySubscriptExpr>(base)) { // g[m][0]: multi-dimensional - analysed as one opaque array
+      if (isa<ArraySubscriptExpr>(base)) { // g[m][0]: multi-dimensional - analyzed as one opaque array
         if (const VarDecl *vd = localFloatArray(subscriptRoot(base), Ctx)) {
           ArrayUse &a = touch(vd);
           if (s != writeTarget)
@@ -1582,7 +1582,7 @@ private:
         smooth = true;
     if (smooth) {
       if (si.state.size() > 1)
-        findResiduals(si, inner, dep);
+        findResiduals(fs, si, inner, dep);
       si.residual = !si.res.empty();
       return "";
     }
@@ -1639,7 +1639,8 @@ private:
   // exactly one iterated variable or one trial local that is itself computed from iterated variables alone (the point
   // at which the function is evaluated). Body locals that are reassigned, or values read from other iterations
   // through anything but that one variable, disqualify it.
-  void findResiduals(SolveInfo &si, const std::set<const VarDecl *> &inner, const std::set<const VarDecl *> &dep) const {
+  void findResiduals(const ForStmt *fs, SolveInfo &si, const std::set<const VarDecl *> &inner,
+                     const std::set<const VarDecl *> &dep) const {
     std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), paramSet(si.params.begin(), si.params.end());
     std::map<const VarDecl *, const DeclStmt *> declOf;
     std::set<const VarDecl *> reassigned;
@@ -1669,11 +1670,11 @@ private:
     for (const Stmt *s : si.iter)
       assigns(s);
     // walk an expression's dependencies: inputs, iterated variables, and body locals followed through their
-    // initialisers; a body local computed from iterated variables alone is a frontier point (a trial local)
+    // initializers; a body local computed from iterated variables alone is a frontier point (a trial local)
     struct Walk { bool inputs = false, bad = false; std::set<const VarDecl *> frontier, sliceLocals, trialLocals; };
     std::function<void(const Expr *, Walk &)> walk;
     std::function<bool(const VarDecl *)> pureState = [&](const VarDecl *vd) {
-      // a body local whose initialiser reaches iterated variables but no inputs
+      // a body local whose initializer reaches iterated variables but no inputs
       if (!declOf.count(vd) || reassigned.count(vd) || !vd->hasInit())
         return false;
       Walk w;
@@ -1697,6 +1698,18 @@ private:
             continue;
           }
           if (pureState(vd)) {
+            // a body local computed from the iterated variables alone: one that reads a single iterated variable
+            // is part of the residual's expression (e.g. `double u = x * x;`), one that reads several is a trial
+            // point (e.g. a secant or interpolation step)
+            Walk w2;
+            walk(vd->getInit(), w2);
+            if (w2.frontier.size() == 1 && w2.trialLocals.empty()) {
+              if (!w.sliceLocals.count(vd)) {
+                w.sliceLocals.insert(vd);
+                walk(vd->getInit(), w);
+              }
+              continue;
+            }
             w.frontier.insert(vd);
             w.trialLocals.insert(vd);
             continue;
@@ -1735,7 +1748,7 @@ private:
       r.trialVar = *w.frontier.begin();
       r.slice = inOrder(w.sliceLocals);
       if (w.trialLocals.count(r.trialVar)) {
-        // the trial local and the pure-state locals its initialiser uses, recomputed from the exit state
+        // the trial local and the pure-state locals its initializer uses, recomputed from the exit state
         std::set<const VarDecl *> need{r.trialVar};
         std::function<void(const Expr *)> grow = [&](const Expr *x) {
           std::set<const VarDecl *> refs;
@@ -1763,6 +1776,62 @@ private:
             consider(dyn_cast<VarDecl>(d->getDecl()), bo->getRHS());
       }
     }
+    // try first the values the loop tests (in a branch or exit condition) or carries to the next iteration: an
+    // intermediate quantity that happens to vanish at the exit state is then never mistaken for the residual
+    std::set<const VarDecl *> tested;
+    std::function<void(const Stmt *)> conds = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *is = dyn_cast<IfStmt>(s))
+        solveRefs(is->getCond(), tested);
+      for (const Stmt *c : s->children())
+        conds(c);
+    };
+    for (const Stmt *s : si.iter)
+      conds(s);
+    if (const auto *body = dyn_cast<CompoundStmt>(fs->getBody()))
+      for (const Stmt *s : body->body())
+        if (isBreakIf(s))
+          solveRefs(cast<IfStmt>(s)->getCond(), tested);
+    // the equation a loop solves must steer it: a candidate is kept only if a condition tests it or the update of an
+    // iterated variable reads it (directly or through body locals); a value computed beside the iteration and never
+    // used by it is not a relation the loop drives to zero, even if it happens to vanish at the exit state
+    std::set<const VarDecl *> steers(tested.begin(), tested.end());
+    for (bool grew = true; grew;) {
+      grew = false;
+      auto add = [&](const Expr *e) {
+        std::set<const VarDecl *> r;
+        solveRefs(e, r);
+        for (const VarDecl *x : r)
+          grew |= steers.insert(x).second;
+      };
+      std::function<void(const Stmt *)> scan = [&](const Stmt *s) {
+        if (!s)
+          return;
+        if (const auto *bo = dyn_cast<BinaryOperator>(s))
+          if (bo->isAssignmentOp())
+            if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+              if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+                if (stateSet.count(vd) || steers.count(vd))
+                  add(bo->getRHS());
+        if (const auto *ds = dyn_cast<DeclStmt>(s))
+          for (const Decl *d : ds->decls())
+            if (const auto *vd = dyn_cast<VarDecl>(d))
+              if (vd->hasInit() && steers.count(vd))
+                add(vd->getInit());
+        for (const Stmt *c : s->children())
+          scan(c);
+      };
+      for (const Stmt *s : si.iter)
+        scan(s);
+    }
+    si.res.erase(std::remove_if(si.res.begin(), si.res.end(),
+                                [&](const SolveInfo::Residual &r) { return !steers.count(r.var); }),
+                 si.res.end());
+    std::stable_sort(si.res.begin(), si.res.end(), [&](const SolveInfo::Residual &x, const SolveInfo::Residual &y) {
+      auto rank = [&](const SolveInfo::Residual &r) { return (tested.count(r.var) || stateSet.count(r.var)) ? 0 : 1; };
+      return rank(x) < rank(y);
+    });
   }
 
   // Adjoint of a multi-state root-finding loop through the residual found at run time (see findResiduals).
@@ -1772,11 +1841,18 @@ private:
     const std::string line = std::to_string(SM.getSpellingLineNumber(fs->getBeginLoc()));
     auto T = [&](const VarDecl *v) { return tstr(v->getType().getNonReferenceType().getUnqualifiedType()); };
     std::string out = ind + "{ // cuad: implicit adjoint of the root-finding loop at line " + line +
-                      ": the result is a root of the first residual that vanishes at the exit state, among";
+                      ": the result is a root of the residual that vanishes at the exit state, among";
     for (const auto &r : si.res)
       out += " " + r.var->getNameAsString() + "(" + r.trialVar->getNameAsString() + ")";
     out += "\n";
-    out += i1 + "int _cuad_use" + id + " = -1;\n" + i1 + "double _cuad_x" + id + " = 0, _cuad_rt" + id + " = 0;\n";
+    // every candidate is evaluated at the exit state: whether it vanishes, at which point, and the derivative of the
+    // root it implies (-R_p / R_t for each input); several vanishing candidates must agree on both
+    const size_t K = si.res.size(), P = std::max<size_t>(si.params.size(), 1);
+    const std::string Ks = std::to_string(K), Ps = std::to_string(P);
+    const std::string use = "_cuad_use" + id, X = "_cuad_x" + id, RT = "_cuad_rt" + id, V = "_cuad_v" + id,
+                      XK = "_cuad_xk" + id, RK = "_cuad_rk" + id, D = "_cuad_d" + id;
+    out += i1 + "int " + use + " = -1, " + V + "[" + Ks + "];\n" + i1 + "double " + X + " = 0, " + RT + " = 0, " + XK + "[" +
+           Ks + "], " + RK + "[" + Ks + "], " + D + "[" + Ks + "][" + Ps + "];\n";
     auto localsOf = [&](const std::vector<const Stmt *> &stmts) {
       std::vector<const VarDecl *> v;
       for (const Stmt *s : stmts)
@@ -1808,35 +1884,64 @@ private:
     };
     bool saved = noPush_;
     noPush_ = true;
-    for (size_t k = 0; k < si.res.size(); ++k) {
+    for (size_t k = 0; k < K; ++k) {
       const auto &r = si.res[k];
-      out += i1 + "if (_cuad_use" + id + " < 0) {\n";
-      out += i2 + "double _cuad_R, _cuad_Rt;\n" + i2 + "{\n";
+      const std::string kk = std::to_string(k), t = r.trialVar->getNameAsString();
+      out += i1 + "{ // candidate " + r.var->getNameAsString() + "(" + t + ")\n";
+      out += i2 + "double _cuad_R, _cuad_Rt;\n" + i2 + V + "[" + kk + "] = 0;\n" + i2 + "{\n";
       std::string o;
       for (const Stmt *s : r.trialDecls)
         o += genPrimal(s, depth + 3);
       for (const Stmt *s : r.slice)
         o += genPrimal(s, depth + 3);
       out += o + i3 + "_cuad_R = " + prim(r.expr) + ";\n" + i2 + "}\n";
-      out += i2 + "{\n" + pass(r, "1", "_cuad_Rt", true, i3, depth + 3) + i2 + "}\n";
+      // R_t and R_p: the residual's adjoint for the seed 1, with the inputs' adjoints shadowed
+      std::string cp;
+      for (size_t j = 0; j < si.params.size(); ++j)
+        cp += i3 + D + "[" + kk + "][" + std::to_string(j) + "] = " + si.params[j]->getNameAsString() + "_b;\n";
+      if (si.params.empty())
+        cp += i3 + D + "[" + kk + "][0] = 0;\n";
+      out += i2 + "{\n" + pass(r, "1", "_cuad_Rt", true, i3, depth + 3) + cp + i2 + "}\n";
       out += i2 + "{\n";
       for (const Stmt *s : r.trialDecls)
         out += genPrimal(s, depth + 3);
-      out += i3 + "if (_cuad_Rt != 0 && fabs(_cuad_R) <= CUAD_SOLVE_TOL * fabs(_cuad_Rt * " + r.trialVar->getNameAsString() +
-             ")) { _cuad_use" + id + " = " + std::to_string(k) + "; _cuad_x" + id + " = " +
-             r.trialVar->getNameAsString() + "; _cuad_rt" + id + " = _cuad_Rt; }\n" + i2 + "}\n" + i1 + "}\n";
+      out += i3 + "if (_cuad_Rt != 0 && fabs(_cuad_R) <= fabs(_cuad_Rt) * (CUAD_SOLVE_TOL * fabs((double)" + t +
+             ") + CUAD_SOLVE_ATOL)) {\n";
+      out += i3 + "  " + V + "[" + kk + "] = 1; " + XK + "[" + kk + "] = " + t + "; " + RK + "[" + kk + "] = _cuad_Rt;\n";
+      out += i3 + "  for (int _cuad_j = 0; _cuad_j < " + Ps + "; ++_cuad_j) " + D + "[" + kk + "][_cuad_j] = -" + D + "[" +
+             kk + "][_cuad_j] / _cuad_Rt;\n";
+      out += i3 + "}\n" + i2 + "}\n" + i1 + "}\n";
     }
-    out += i1 + "if (_cuad_use" + id + " < 0) cuad_solve_fail();\n";
-    // the seeds of the iterated variables: those at the root are summed; values that vanish at the root (residuals,
-    // step sizes) carry no derivative; any other seeded variable means the result is not a function of the root
+    // the first vanishing candidate defines the root; any other vanishing candidate must locate the same root and
+    // imply the same derivative, or the relation the loop solved is ambiguous (e.g. x - a and x - b at a = b)
+    out += i1 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) {\n";
+    out += i2 + "if (!" + V + "[_cuad_k]) continue;\n";
+    out += i2 + "if (" + use + " < 0) { " + use + " = _cuad_k; " + X + " = " + XK + "[_cuad_k]; " + RT + " = " + RK +
+           "[_cuad_k]; continue; }\n";
+    out += i2 + "double _cuad_dm = 0, _cuad_dd = 0;\n";
+    out += i2 + "for (int _cuad_j = 0; _cuad_j < " + Ps + "; ++_cuad_j) {\n";
+    out += i3 + "_cuad_dm = fmax(_cuad_dm, fmax(fabs(" + D + "[" + use + "][_cuad_j]), fabs(" + D + "[_cuad_k][_cuad_j])));\n";
+    out += i3 + "_cuad_dd = fmax(_cuad_dd, fabs(" + D + "[" + use + "][_cuad_j] - " + D + "[_cuad_k][_cuad_j]));\n" + i2 + "}\n";
+    out += i2 + "if (fabs(" + XK + "[_cuad_k] - " + X + ") > CUAD_SOLVE_AGREE * fmax(fabs(" + XK + "[_cuad_k]), fabs(" + X +
+           ")) + CUAD_SOLVE_ATOL || _cuad_dd > CUAD_SOLVE_AGREE * _cuad_dm) cuad_solve_fail();\n";
+    out += i1 + "}\n";
+    out += i1 + "if (" + use + " < 0) cuad_solve_fail();\n";
+    // the seeds of the iterated variables: those at the root are summed; a variable that holds a vanishing candidate
+    // residual is zero along the solution (the candidates agree) and carries no derivative; any other seeded
+    // variable, including one that only happens to be zero here, means the result is not a function of the root
     out += i1 + "double _cuad_s" + id + " = 0;\n";
     for (const VarDecl *v : si.state) {
-      std::string x = v->getNameAsString();
+      std::string x = v->getNameAsString(), held;
+      for (size_t k = 0; k < K; ++k)
+        if (si.res[k].var == v)
+          held += (held.empty() ? "" : " || ") + V + "[" + std::to_string(k) + "]";
       out += i1 + "if (" + x + "_b != 0) {\n";
-      out += i2 + "if (fabs((double)" + x + " - _cuad_x" + id + ") <= CUAD_SOLVE_TOL * fabs(_cuad_x" + id + ")) _cuad_s" + id +
-             " += " + x + "_b;\n";
-      out += i2 + "else if (!(fabs((double)" + x + ") <= CUAD_SOLVE_TOL * (fabs(_cuad_x" + id + ") + fabs(_cuad_rt" + id +
-             " * _cuad_x" + id + ")))) cuad_solve_fail();\n";
+      out += i2 + "if (fabs((double)" + x + " - " + X + ") <= CUAD_SOLVE_TOL * fabs(" + X + ") + CUAD_SOLVE_ATOL) _cuad_s" +
+             id + " += " + x + "_b;\n";
+      if (!held.empty())
+        out += i2 + "else if ((" + held + ") && fabs((double)" + x + ") <= fabs(" + RT + ") * (CUAD_SOLVE_TOL * fabs(" + X +
+               ") + CUAD_SOLVE_ATOL)) {}\n";
+      out += i2 + "else cuad_solve_fail();\n";
       out += i2 + x + "_b = 0;\n" + i1 + "}\n";
     }
     for (size_t k = 0; k < si.res.size(); ++k)
@@ -1846,7 +1951,7 @@ private:
     return out + ind + "}\n";
   }
 
-  // A loop recognised as a convergence loop may still have left through its `break` for another reason (a
+  // A loop recognized as a convergence loop may still have left through its `break` for another reason (a
   // threshold, an iteration cap): then its result is not a fixed point and the implicit adjoint would be the
   // derivative of a different quantity. One more iteration from the exit state must not move it by more than
   // CUAD_SOLVE_TOL (relative); otherwise trap.
@@ -1869,7 +1974,7 @@ private:
       out += in + "_cuad_fr = fmax(_cuad_fr, fabs((double)(" + x + " - " + f + "))); _cuad_fs = fmax(_cuad_fs, fabs((double)" +
              f + ")); " + x + " = " + f + ";\n";
     }
-    out += in + "if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs) cuad_solve_fail();\n" + ind + "}\n";
+    out += in + "if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs + CUAD_SOLVE_ATOL) cuad_solve_fail();\n" + ind + "}\n";
     return out;
   }
 
@@ -1947,7 +2052,7 @@ private:
         hi = hi.empty() ? x : "fmax(" + hi + ", " + x + ")";
       }
       out += i1 + "if (" + hi + " - " + lo + " > CUAD_SOLVE_TOL * fmax(fabs(" + hi + "), fabs(" + lo +
-             "))) cuad_solve_fail();\n";
+             ")) + CUAD_SOLVE_ATOL) cuad_solve_fail();\n";
     }
     out += i1 + Tm + " _cuad_s" + id + " = " + sum + ";\n";
     for (const VarDecl *v : si.state)
@@ -1981,7 +2086,7 @@ private:
     // result is that bound: its derivative is the derivative of the program. The branch taken at the collapsed point
     // names the bounds that kept moving; the others receive the seed and pass it to their initial values.
     out += i1 + "if (fabs((double)((" + prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) +
-           "))) <= CUAD_SOLVE_TOL * fabs((double)(_cuad_r" + id + " * " + m + "))) {\n";
+           "))) <= fabs((double)_cuad_r" + id + ") * (CUAD_SOLVE_TOL * fabs((double)" + m + ") + CUAD_SOLVE_ATOL)) {\n";
     out += residualReverse("-(_cuad_s" + id + ") / (_cuad_r" + id + ")", i2, depth + 2);
     std::set<const VarDecl *> thenSet, elseSet;
     for (int armI = 0; armI < 2; ++armI) {
@@ -2034,7 +2139,7 @@ private:
   // it and evaluated at run time at the top of the iteration - identically in the forward and the backward
   // loop, because it may use only the loop's own induction variable, induction variables of loops enclosing
   // it (fixed while it runs and while it is reversed), variables the function never modifies, and the
-  // induction variables (and initialised locals) of loops inside the body, through their bounds. Any other
+  // induction variables (and initialized locals) of loops inside the body, through their bounds. Any other
   // index - an array read, a call, %, / - makes the whole array the region.
   using Interval = std::pair<std::string, std::string>; // [lo, hi] as C expressions
   const Stmt *curBody_ = nullptr;
@@ -2177,7 +2282,7 @@ private:
           r = {a.first, cond->getOpcode() == BO_LT ? foldOp(bnd.second, '-', "1") : bnd.second};
           return true;
         }
-        // an initialised local of the body that is never reassigned: the range of its initialiser
+        // an initialized local of the body that is never reassigned: the range of its initializer
         if (v->hasInit() && !v->getType()->isReferenceType() && declIn(L->getBody(), v))
           return !reassignedIn(L->getBody(), v) && rangeOf(v->getInit(), L, r, depth + 1);
         return false;
@@ -2190,7 +2295,7 @@ private:
           r = {nm, nm};
           return true;
         }
-      // ... or a parameter / initialised local that the function never reassigns
+      // ... or a parameter / initialized local that the function never reassigns
       if ((isa<ParmVarDecl>(v) || v->hasInit()) && !reassignedIn(curBody_, v)) {
         r = {nm, nm};
         return true;
@@ -2471,7 +2576,7 @@ private:
           out += ind + "  cuad_push(" + v->getNameAsString() + ");\n";
         out += arrayCheckpoint(fs, true, ind + "  ");
       }
-      // a recompute loop re-materialises its primal, with its own pushes, inside the
+      // a recompute loop re-materializes its primal, with its own pushes, inside the
       // backward loop - its forward pass must not push, NESTED ones included (genBlock only caught top-level ones).
       // Pushes left behind by a loop inside an `if` misaligned every pop of a value pushed before the loop: in
       // one kernel a running maximum popped an earlier loop's leftovers, and the
@@ -2924,7 +3029,7 @@ private:
       if (const auto *fs = dyn_cast<ForStmt>(s))
         if (isRecompute(fs)) {
           // a grid-stride loop's iterations are independent elements (nothing carried between them): no primal
-          // pass needed - the backward loop re-materialises each one
+          // pass needed - the backward loop re-materializes each one
           std::string init = fs->getInit() ? src(fs->getInit()->getSourceRange()) : "";
           if (init.find("threadIdx") != std::string::npos && carriedVars(fs).empty() &&
               checkpointedArrays(fs).empty())

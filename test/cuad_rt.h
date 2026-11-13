@@ -173,6 +173,18 @@ static inline void cuad_tape_free() {
 #ifndef CUAD_SOLVE_TOL
 #define CUAD_SOLVE_TOL 1e-6
 #endif
+// Absolute part of the same tests, in the units of the iterated variables (default 0: purely relative). With 0, a
+// state or root at exactly zero passes only if the test quantity vanishes exactly; otherwise the adjoint traps, so
+// a code whose solution can sit at the origin should set the scale of its variables here.
+#ifndef CUAD_SOLVE_ATOL
+#define CUAD_SOLVE_ATOL 0.0
+#endif
+// A loop with several candidate residuals (secant, regula falsi, Brent): when more than one vanishes at the exit
+// state, they must locate the same root and imply the same derivative of it to this relative tolerance; otherwise
+// the relation the loop solved is ambiguous and the adjoint traps.
+#ifndef CUAD_SOLVE_AGREE
+#define CUAD_SOLVE_AGREE 1e-4
+#endif
 #define cuad_solve_fail() cuad_tape_fail()
 
 // Bounds of the element ranges that a loop's per-iteration checkpoint saves (see ReverseMode.h).
