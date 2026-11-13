@@ -6,7 +6,7 @@
 # dependencies (Clang/LLVM 14 dev files), and for the comparisons:
 #   COMPARATORS  directory with Clang 19.1.7 (sdk/usr/lib/llvm-19), ClangEnzyme-19.so of Enzyme v0.0.307
 #                (enzyme-build/Enzyme/) and Clad v2.5 (clad-build/, clad/<src>/include)
-#   PY           Python 3 with numpy, scipy, mpmath, matplotlib
+#   PY           Python 3 with numpy, scipy, mpmath, matplotlib (and pdflatex with TikZ and newtx for Fig. 1)
 #   JAXPY        Python 3 with jax[cuda12] 0.6.2, optimistix 0.0.11 (optional; skipped if missing)
 # Run on an otherwise idle GPU (timings). Total time: about two hours on an RTX 5080.
 set -uo pipefail
