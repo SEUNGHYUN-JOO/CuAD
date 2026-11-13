@@ -119,9 +119,13 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   site, evaluated at run time from loop counters and unmodified variables (the whole array when
   an index is not of that form). A single snapshot at loop entry is used only when every access
   in the loop uses one index that is provably injective in the induction variable.
-- **Thread-local tape for overwritten values**: values that must be restored are pushed to a
+- **Per-thread tape for overwritten values**: values that must be restored are pushed to a
   fixed-size per-thread array (`cuad_rt.h`, size `CUAD_TAPE_SIZE`, default 256), not to the
-  device heap.
+  device heap. With `-DCUAD_GLOBAL_TAPE` the tape is instead one device allocation sized at run
+  time for the launched threads (`cuad_tape_alloc(threads, capacity)` before the launch); entries
+  of neighbouring threads are interleaved so that a warp pushes to contiguous memory, and nested
+  adjoint calls stack their entries in the thread's column. Use it when a loop's checkpoints are
+  too long for thread-local memory, which CUDA reserves for every thread that can be resident.
 - **GPU-safe adjoint accumulation**: adjoints of shared arrays use `atomicAdd`, while
   thread-local arrays and scalars use plain `+=`.
 - **Loops**: grid-stride loops, loops with local declarations (recomputed per
@@ -139,9 +143,11 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   the forward sweep has written its outputs, so a kernel must not overwrite the arrays it reads
   (the property that `__restrict__` declares). Split an in-place update into a kernel that
   reads and a kernel that writes.
-- The per-thread tape has a compile-time size (`-DCUAD_TAPE_SIZE=...`). A loop that carries
-  non-accumulated scalars or local arrays stores them in every iteration (a carried array: the
-  region the iteration may write), so its tape grows with the trip count. Overflow traps.
+- The per-thread tape has a compile-time size (`-DCUAD_TAPE_SIZE=...`), or the run-time
+  capacity of the global tape. A loop that carries non-accumulated scalars or local arrays stores
+  them in every iteration (a carried array: the region the iteration may write), so its tape grows
+  with the trip count. Overflow traps, and so does a global-tape thread index outside the
+  allocation. The global tape's thread index is the linear index over the whole grid.
 - A `__global__` kernel's scalar parameters are uniform across the launch and are held
   passive (no adjoint argument). Make a quantity an array if its derivative is needed.
 - `if` conditions are re-evaluated in the reverse sweep, so a branch must not reassign a

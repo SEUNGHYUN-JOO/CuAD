@@ -6,7 +6,7 @@
 
 __device__ void sa_source_b(float nut, float &nut_b, float d, float &d_b, float Om, float &Om_b, float nu, float &nu_b, float beta, float &beta_b, float sa_source_seed_b)
 {
-  double _cuad_tape[CUAD_TAPE_SIZE]; int _cuad_tp = 0;
+  CUAD_TAPE_DECL;
   float chi = nut / nu;
   float chi3 = chi * chi * chi;
   float fv1 = chi3 / (chi3 + SA_CV1 * SA_CV1 * SA_CV1);

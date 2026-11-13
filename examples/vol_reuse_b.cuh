@@ -171,7 +171,7 @@ __host__ __device__ void faceK_b(const Blk & B, const float * x, float *x_b, con
 
 __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y, float *y_b, const float * z, float *z_b, float * vol, float *vol_b)
 {
-  double _cuad_tape[CUAD_TAPE_SIZE]; int _cuad_tp = 0;
+  CUAD_TAPE_DECL;
   long n = (long)B.ni * B.nj * B.nk;
   for (long t = (((n) - 1) < ((long)(blockIdx.x * (long)blockDim.x + threadIdx.x)) ? ((long)(blockIdx.x * (long)blockDim.x + threadIdx.x)) - ((long)gridDim.x * blockDim.x) : ((long)(blockIdx.x * (long)blockDim.x + threadIdx.x)) + ((((n) - 1) - ((long)(blockIdx.x * (long)blockDim.x + threadIdx.x))) / ((long)gridDim.x * blockDim.x)) * ((long)gridDim.x * blockDim.x)); t >= ((long)(blockIdx.x * (long)blockDim.x + threadIdx.x)); t -= ((long)gridDim.x * blockDim.x)) {
     int i = t % B.ni, j = (t / B.ni) % B.nj, k = t / ((long)B.ni * B.nj);
@@ -237,7 +237,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(v_b);
     S_b[2] += (v_b)*(C[2]);
     C_b[2] += (S[2])*(v_b);
+    CUAD_TAPE_PUBLISH();
     faceK_b(B, x, x_b, y, y_b, z, z_b, i, j, k + 1, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);
@@ -250,7 +252,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(-(v_b));
     S_b[2] += (-(v_b))*(C[2]);
     C_b[2] += (S[2])*(-(v_b));
+    CUAD_TAPE_PUBLISH();
     faceK_b(B, x, x_b, y, y_b, z, z_b, i, j, k, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);
@@ -263,7 +267,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(v_b);
     S_b[2] += (v_b)*(C[2]);
     C_b[2] += (S[2])*(v_b);
+    CUAD_TAPE_PUBLISH();
     faceJ_b(B, x, x_b, y, y_b, z, z_b, i, j + 1, k, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);
@@ -276,7 +282,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(-(v_b));
     S_b[2] += (-(v_b))*(C[2]);
     C_b[2] += (S[2])*(-(v_b));
+    CUAD_TAPE_PUBLISH();
     faceJ_b(B, x, x_b, y, y_b, z, z_b, i, j, k, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);
@@ -289,7 +297,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(v_b);
     S_b[2] += (v_b)*(C[2]);
     C_b[2] += (S[2])*(v_b);
+    CUAD_TAPE_PUBLISH();
     faceI_b(B, x, x_b, y, y_b, z, z_b, i + 1, j, k, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);
@@ -302,7 +312,9 @@ __global__ void volKernel_b(Blk B, const float * x, float *x_b, const float * y,
     C_b[1] += (S[1])*(-(v_b));
     S_b[2] += (-(v_b))*(C[2]);
     C_b[2] += (S[2])*(-(v_b));
+    CUAD_TAPE_PUBLISH();
     faceI_b(B, x, x_b, y, y_b, z, z_b, i, j, k, S, S_b, C, C_b);
+    CUAD_TAPE_RESTORE();
     cuad_pop(C[2]);
     cuad_pop(C[1]);
     cuad_pop(C[0]);

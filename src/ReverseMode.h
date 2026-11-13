@@ -16,7 +16,8 @@
 //   - = , += , -= , *= , /=  (overwrites handled by the tape);
 //   - cross-call adjoints: a call to another differentiable function becomes a
 //     call to its _b companion.
-// Tape: a per-thread LIFO stack (cuad_push / cuad_pop, see test/cuad_rt.h).
+// Tape: a per-thread LIFO stack (CUAD_TAPE_DECL, cuad_push / cuad_pop, see test/cuad_rt.h);
+// a function with a tape publishes its top around each call to another _b function.
 // Still TODO: struct/member fields, atomics, non-canonical loop reversal
 // (kept in forward order with a warning), and calls whose active arguments are
 // not simple lvalues.
@@ -56,6 +57,7 @@ class ReverseMode {
   std::set<const VarDecl *> reused_; // local arrays written by >1 call -> tape
   std::set<const VarDecl *> arrayTaped_; // local arrays with self-dependent element writes
   std::string curRetSeed_;           // return-adjoint seed param (value-ret fns)
+  bool hasTape_ = false;             // the function being generated declares a tape
   mutable int tmp_ = 0;              // fresh snapshot-variable counter
   mutable bool noPush_ = false;      // emitting a push-free primal (a recompute loop's forward pass)
   mutable const ForStmt *ckptLoop_ = nullptr; // the recompute loop whose own reverse will pop its checkpoints
@@ -187,9 +189,10 @@ public:
     }
     out += ")\n{\n";
     out += localScalarAdj;
-    if (!taped_.empty() || !reused_.empty() || !arrayTaped_.empty() ||
-        anyCheckpointedArray(FD->getBody())) // per-thread private tape
-      out += "  double _cuad_tape[CUAD_TAPE_SIZE]; int _cuad_tp = 0;\n";
+    hasTape_ = !taped_.empty() || !reused_.empty() || !arrayTaped_.empty() ||
+               anyCheckpointedArray(FD->getBody());
+    if (hasTape_) // per-thread tape: a local array, or a frame of the global tape (cuad_rt.h)
+      out += "  CUAD_TAPE_DECL;\n";
     if (const auto *body = dyn_cast_or_null<CompoundStmt>(FD->getBody())) {
       std::vector<const Stmt *> stmts(body->body_begin(), body->body_end());
       out += genScope(stmts, 1);
@@ -934,6 +937,9 @@ private:
       args += retSeed;
     }
     std::string out = pre + ind + fd->getNameAsString() + "_b" + calleeTArgs(call) + "(" + args + ");\n";
+    if (hasTape_) // a global tape: the callee's frame starts above this function's entries
+      out = pre + ind + "CUAD_TAPE_PUBLISH();\n" + ind + fd->getNameAsString() + "_b" + calleeTArgs(call) +
+            "(" + args + ");\n" + ind + "CUAD_TAPE_RESTORE();\n";
     for (auto &pr : post)
       pushAdj(pr.first, pr.second, out, ind);
     return out;

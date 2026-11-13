@@ -11,6 +11,8 @@
 #include "cuad_rt.h"
 #include "cases/carried_arrays.cu"
 #include "out/carried_arrays_b.cuh"
+#include "cases/global_tape.cu"
+#include "out/global_tape_b.cuh"
 
 typedef void (*Fn)(const double *, double *, int);
 typedef void (*Adj)(const double *, double *, double *, double *, int);
@@ -51,6 +53,8 @@ int main() {
   CHECK(tri_region);
   CHECK(neg_offset);
   CHECK(sign_branch);
+  CHECK(nested_taped);  // nested calls between taped functions (test/cases/global_tape.cu)
+  CHECK(through_plain);
   std::printf("RESULT: %s\n", fails ? "FAILED" : "all passed");
   return fails ? 1 : 0;
 }

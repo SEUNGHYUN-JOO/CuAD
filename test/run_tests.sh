@@ -54,6 +54,11 @@ g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/ver
 test/out/verify_carried || fail=1
 
 echo
+echo "=== GLOBAL TAPE (-DCUAD_GLOBAL_TAPE): concurrent threads on one tape, nested frames, bounds; ASan ==="
+g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -pthread -Itest test/verify_global_tape.cpp -o test/out/verify_global_tape
+test/out/verify_global_tape || fail=1
+
+echo
 echo "=== UNSUPPORTED CONSTRUCTS must be rejected with located errors (exit 3) ==="
 for m in "" "-r"; do
   want=1; [ "$m" = "-r" ] && want=3        # forward: erf; reverse: while, break, erf
