@@ -22,10 +22,11 @@ __global__ void c2pKernel_d(Blk B, const Blk *__restrict bb, const float *__rest
     float ri_d = (-((1.f)*(rho_d)))/((rho)*(rho));
     float ri = 1.f / rho;
     float u_d = (q_d[o + B.ncT + c])*(ri) + (q[o + B.ncT + c])*(ri_d);
+    float u = q[o + B.ncT + c] * ri;
     float v_d = (q_d[o + 2 * B.ncT + c])*(ri) + (q[o + 2 * B.ncT + c])*(ri_d);
+    float v = q[o + 2 * B.ncT + c] * ri;
     float ww_d = (q_d[o + 3 * B.ncT + c])*(ri) + (q[o + 3 * B.ncT + c])*(ri_d);
-    float u = q[o + B.ncT + c] * ri, v = q[o + 2 * B.ncT + c] * ri,
-              ww = q[o + 3 * B.ncT + c] * ri;
+    float ww = q[o + 3 * B.ncT + c] * ri;
     float p_d;
     float p = th_p_d(rho, rho_d, q[o + 4 * B.ncT + c] - 0.5f * rho * (u * u + v * v + ww * ww), q_d[o + 4 * B.ncT + c] - (((0.5f)*(rho_d))*((u * u + v * v + ww * ww)) + (0.5f * rho)*(((u_d)*(u) + (u)*(u_d) + (v_d)*(v) + (v)*(v_d) + (ww_d)*(ww) + (ww)*(ww_d)))), th, p_d);
     w_d[o + c] = rho_d;

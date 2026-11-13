@@ -7,13 +7,17 @@
 __host__ __device__ void faceVec_d(float ax, float ax_d, float ay, float ay_d, float az, float az_d, float bx, float bx_d, float by, float by_d, float bz, float bz_d, float cx, float cx_d, float cy, float cy_d, float cz, float cz_d, float dx, float dx_d, float dy, float dy_d, float dz, float dz_d, float * S, float * S_d, float * C, float * C_d)
 {
   float d1x_d = cx_d - (ax_d);
+  float d1x = cx - ax;
   float d1y_d = cy_d - (ay_d);
+  float d1y = cy - ay;
   float d1z_d = cz_d - (az_d);
-  float d1x = cx - ax, d1y = cy - ay, d1z = cz - az;
+  float d1z = cz - az;
   float d2x_d = dx_d - (bx_d);
+  float d2x = dx - bx;
   float d2y_d = dy_d - (by_d);
+  float d2y = dy - by;
   float d2z_d = dz_d - (bz_d);
-  float d2x = dx - bx, d2y = dy - by, d2z = dz - bz;
+  float d2z = dz - bz;
   S_d[0] = (0.5f)*(((d1y_d)*(d2z) + (d1y)*(d2z_d) - ((d1z_d)*(d2y) + (d1z)*(d2y_d))));
   S[0] = 0.5f * (d1y * d2z - d1z * d2y);
   S_d[1] = (0.5f)*(((d1z_d)*(d2x) + (d1z)*(d2x_d) - ((d1x_d)*(d2z) + (d1x)*(d2z_d))));
@@ -30,22 +34,28 @@ __host__ __device__ void faceVec_d(float ax, float ax_d, float ay, float ay_d, f
 
 __host__ __device__ void faceI_d(const Blk & B, const float * x, const float * x_d, const float * y, const float * y_d, const float * z, const float * z_d, int i, int j, int k, float * S, float * S_d, float * C, float * C_d)
 {
-  long a = B.noff + nidx(B, i, j, k), b = B.noff + nidx(B, i, j + 1, k);
-  long c = B.noff + nidx(B, i, j + 1, k + 1), d = B.noff + nidx(B, i, j, k + 1);
+  long a = B.noff + nidx(B, i, j, k);
+  long b = B.noff + nidx(B, i, j + 1, k);
+  long c = B.noff + nidx(B, i, j + 1, k + 1);
+  long d = B.noff + nidx(B, i, j, k + 1);
   faceVec_d(x[a], x_d[a], y[a], y_d[a], z[a], z_d[a], x[b], x_d[b], y[b], y_d[b], z[b], z_d[b], x[c], x_d[c], y[c], y_d[c], z[c], z_d[c], x[d], x_d[d], y[d], y_d[d], z[d], z_d[d], S, S_d, C, C_d);
 }
 
 __host__ __device__ void faceJ_d(const Blk & B, const float * x, const float * x_d, const float * y, const float * y_d, const float * z, const float * z_d, int i, int j, int k, float * S, float * S_d, float * C, float * C_d)
 {
-  long a = B.noff + nidx(B, i, j, k), b = B.noff + nidx(B, i, j, k + 1);
-  long c = B.noff + nidx(B, i + 1, j, k + 1), d = B.noff + nidx(B, i + 1, j, k);
+  long a = B.noff + nidx(B, i, j, k);
+  long b = B.noff + nidx(B, i, j, k + 1);
+  long c = B.noff + nidx(B, i + 1, j, k + 1);
+  long d = B.noff + nidx(B, i + 1, j, k);
   faceVec_d(x[a], x_d[a], y[a], y_d[a], z[a], z_d[a], x[b], x_d[b], y[b], y_d[b], z[b], z_d[b], x[c], x_d[c], y[c], y_d[c], z[c], z_d[c], x[d], x_d[d], y[d], y_d[d], z[d], z_d[d], S, S_d, C, C_d);
 }
 
 __host__ __device__ void faceK_d(const Blk & B, const float * x, const float * x_d, const float * y, const float * y_d, const float * z, const float * z_d, int i, int j, int k, float * S, float * S_d, float * C, float * C_d)
 {
-  long a = B.noff + nidx(B, i, j, k), b = B.noff + nidx(B, i + 1, j, k);
-  long c = B.noff + nidx(B, i + 1, j + 1, k), d = B.noff + nidx(B, i, j + 1, k);
+  long a = B.noff + nidx(B, i, j, k);
+  long b = B.noff + nidx(B, i + 1, j, k);
+  long c = B.noff + nidx(B, i + 1, j + 1, k);
+  long d = B.noff + nidx(B, i, j + 1, k);
   faceVec_d(x[a], x_d[a], y[a], y_d[a], z[a], z_d[a], x[b], x_d[b], y[b], y_d[b], z[b], z_d[b], x[c], x_d[c], y[c], y_d[c], z[c], z_d[c], x[d], x_d[d], y[d], y_d[d], z[d], z_d[d], S, S_d, C, C_d);
 }
 
@@ -53,7 +63,9 @@ __global__ void volKernel_d(Blk B, const float * x, const float * x_d, const flo
 {
   long n = (long)B.ni * B.nj * B.nk;
   for (long t = blockIdx.x * (long)blockDim.x + threadIdx.x; t < n; t += (long)gridDim.x * blockDim.x) {
-    int i = t % B.ni, j = (t / B.ni) % B.nj, k = t / ((long)B.ni * B.nj);
+    int i = t % B.ni;
+    int j = (t / B.ni) % B.nj;
+    int k = t / ((long)B.ni * B.nj);
     float Sa_d[3] = {0};
     float Ca_d[3] = {0};
     float Sb_d[3] = {0};
