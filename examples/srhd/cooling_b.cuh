@@ -60,7 +60,7 @@ __global__ void cool_implicit_b(const double * P, double *P_b, double * Pn, doub
         }
         double _cuad_fr = 0, _cuad_fs = 0;
         _cuad_fr = fmax(_cuad_fr, fabs((double)(x - _cuad_f3_x))); _cuad_fs = fmax(_cuad_fs, fabs((double)_cuad_f3_x)); x = _cuad_f3_x;
-        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs) cuad_solve_fail();
+        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs + CUAD_SOLVE_ATOL) cuad_solve_fail();
       }
       int _cuad_ok3 = 0;
       for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {

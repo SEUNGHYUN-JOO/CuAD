@@ -1,7 +1,7 @@
 // One-dimensional special-relativistic hydrodynamics (c = 1), ideal gas p = (gam - 1) rho eps.
 // Conserved U = (D, S, tau) = (rho W, rho h W^2 v, rho h W^2 - p - D), h = 1 + gam/(gam-1) p/rho.
 // Primitives P = (rho, u, p) with the four-velocity u = W v, so that |v| < 1 after reconstruction.
-// Arrays hold three planes of n cells (plane k at offset k*n). Outflow boundaries: neighbour indices
+// Arrays hold three planes of n cells (plane k at offset k*n). Outflow boundaries: neighbor indices
 // are clamped to [0, n). Fluxes live on the n+1 faces, face f between cells f-1 and f.
 // Scheme: minmod-limited linear reconstruction of (rho, u, p), HLL flux, SSP-RK2 in the driver.
 // The adiabatic index is an array of length one so that its adjoint can be requested.

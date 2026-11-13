@@ -1,0 +1,90 @@
+{
+  "jax": "0.6.2",
+  "rows": [
+    {
+      "n": 4096,
+      "method": "optx_newton",
+      "median_ms": 13.713720953091979,
+      "first_call_s": 6.937403455027379,
+      "status": "ok",
+      "dot_test_rel_error": 4.385786568971414e-10
+    },
+    {
+      "n": 4096,
+      "method": "optx_bisection",
+      "median_ms": 51.58162396401167,
+      "first_call_s": 8.688901844900101,
+      "status": "ok",
+      "dot_test_rel_error": 5.063493460686429e-10
+    },
+    {
+      "n": 4096,
+      "method": "jax_unrolled40",
+      "median_ms": 10.988457943312824,
+      "first_call_s": 1.04616852698382,
+      "status": "ok",
+      "dot_test_rel_error": 2.904927537477509e-10
+    },
+    {
+      "n": 65536,
+      "method": "optx_newton",
+      "median_ms": 13.944421079941094,
+      "first_call_s": 1.1465369659708813,
+      "status": "ok"
+    },
+    {
+      "n": 65536,
+      "method": "optx_bisection",
+      "median_ms": 35.35937995184213,
+      "first_call_s": 1.042919068946503,
+      "status": "ok"
+    },
+    {
+      "n": 65536,
+      "method": "jax_unrolled40",
+      "median_ms": 10.513490997254848,
+      "first_call_s": 1.1446557820308954,
+      "status": "ok"
+    },
+    {
+      "n": 1048576,
+      "method": "optx_newton",
+      "median_ms": 39.56469602417201,
+      "first_call_s": 1.9292255799518898,
+      "status": "ok"
+    },
+    {
+      "n": 1048576,
+      "method": "optx_bisection",
+      "median_ms": 58.879802003502846,
+      "first_call_s": 1.7634611359098926,
+      "status": "ok"
+    },
+    {
+      "n": 1048576,
+      "method": "jax_unrolled40",
+      "median_ms": 67.21074599772692,
+      "first_call_s": 1.8114822549978271,
+      "status": "ok"
+    },
+    {
+      "n": 4194304,
+      "method": "optx_newton",
+      "median_ms": 123.80536692216992,
+      "first_call_s": 4.4696193250129,
+      "status": "ok"
+    },
+    {
+      "n": 4194304,
+      "method": "optx_bisection",
+      "median_ms": 165.85444496013224,
+      "first_call_s": 4.661531426943839,
+      "status": "ok"
+    },
+    {
+      "n": 4194304,
+      "method": "jax_unrolled40",
+      "status": "failed: XlaRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 35567737136 bytes."
+    }
+  ]
+}

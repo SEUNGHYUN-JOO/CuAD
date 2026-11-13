@@ -1,0 +1,100 @@
+{
+  "summary": {
+    "case": 2,
+    "gradient": "enzyme",
+    "n": 256,
+    "unknowns": 218,
+    "steps": 384,
+    "c2p": "bisection",
+    "noise": 0.0,
+    "beta": 1e-09,
+    "observation_times": [
+      0.15,
+      0.3,
+      0.45,
+      0.6
+    ],
+    "iterations": 14,
+    "objective_evaluations": 33,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "objective_initial": 0.020852365185676493,
+    "objective_final": 5.749912464152864e-06,
+    "misfit_of_the_truth": 0.0,
+    "rel_l2_error_rho0_final": 0.04270297814191899,
+    "wall_s": 32.015740633010864,
+    "solves": 33,
+    "gpu_forward_ms_total": 0.0,
+    "gpu_reverse_ms_total": 0.0,
+    "gradient_checks": [
+      {
+        "h": 1e-05,
+        "rel_error": 1.7178303698236124
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 1.7174492063889126
+      },
+      {
+        "h": 1e-05,
+        "rel_error": 0.2622533025870551
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 0.26220074698578694
+      },
+      {
+        "h": 1e-05,
+        "rel_error": 0.03270749791987983
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 0.03323390379597965
+      }
+    ],
+    "fd_gradient_cost": "2 x 218 forward solves per gradient"
+  },
+  "history": [
+    {
+      "rel_l2_error_rho0": 0.6015827016552655
+    },
+    {
+      "rel_l2_error_rho0": 0.4704405061639221
+    },
+    {
+      "rel_l2_error_rho0": 0.3144625085309483
+    },
+    {
+      "rel_l2_error_rho0": 0.17963892171159948
+    },
+    {
+      "rel_l2_error_rho0": 0.09105207031228266
+    },
+    {
+      "rel_l2_error_rho0": 0.06926377809461888
+    },
+    {
+      "rel_l2_error_rho0": 0.06016978371020239
+    },
+    {
+      "rel_l2_error_rho0": 0.050312442195538966
+    },
+    {
+      "rel_l2_error_rho0": 0.044645484072456894
+    },
+    {
+      "rel_l2_error_rho0": 0.043669669363396425
+    },
+    {
+      "rel_l2_error_rho0": 0.04363445476727662
+    },
+    {
+      "rel_l2_error_rho0": 0.04330636604712289
+    },
+    {
+      "rel_l2_error_rho0": 0.04270297814202879
+    },
+    {
+      "rel_l2_error_rho0": 0.04270297814191899
+    }
+  ]
+}

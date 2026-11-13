@@ -1,0 +1,6 @@
+hll2 dir 0: adjoint 9.683296891854e-03  tangent 9.683296891854e-03  fd 9.683297531904e-03  rel(adj) 6.61e-08  worst face 15 plane 3 err 9.932e-10
+hll2 dir 1: adjoint 6.691583463069e-02  tangent 6.691583463069e-02  fd 6.691583484891e-02  rel(adj) 3.26e-09  worst face 41 plane 3 err 7.584e-10
+c2p2 newton: rel 7.22e-08
+c2p2 bisect: rel 6.53e-09
+p2c2: rel 2.14e-08
+rk2d (linear): rel 1.53e-15

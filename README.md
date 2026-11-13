@@ -31,7 +31,7 @@ Main results:
   unchanged source its heap cache and the heap tape of Clad cost 9 to 4400 times the primal,
   and Clad fails beyond 8192 vortices.
 - **Exact single-precision Jacobians.** A Jacobian assembled from the generated tangents by
-  graph colouring keeps the adjoint gradients accurate to 1e-6 in single precision on a
+  graph coloring keeps the adjoint gradients accurate to 1e-6 in single precision on a
   transonic airfoil, where single-precision finite differences give errors of 5e-4 to 4e-2.
 - **A complete 2-D Euler adjoint.** For a transonic NACA 0012, the residual, the wall and
   far-field boundary conditions and the wall force are differentiated without change to the
@@ -113,7 +113,7 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
 - **Recompute rather than store**: loops that declare locals are recomputed iteration by
   iteration in the reverse sweep. Scalars that such a loop carries from one iteration to the
   next are checkpointed at the top of every iteration; pure accumulations (`v = v + e`) are
-  recognised and need no checkpoint. Local arrays that a loop both writes and reads (a
+  recognized and need no checkpoint. Local arrays that a loop both writes and reads (a
   recurrent state, `a[i] = f(a[i-1])`, a read followed by an overwrite) are checkpointed in the
   same way. Only the elements an iteration may write are saved: an index interval per write
   site, evaluated at run time from loop counters and unmodified variables (the whole array when
@@ -123,7 +123,7 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   fixed-size per-thread array (`cuad_rt.h`, size `CUAD_TAPE_SIZE`, default 256), not to the
   device heap. With `-DCUAD_GLOBAL_TAPE` the tape is instead one device allocation sized at run
   time for the launched threads (`cuad_tape_alloc(threads, capacity)` before the launch); entries
-  of neighbouring threads are interleaved so that a warp pushes to contiguous memory, and nested
+  of neighboring threads are interleaved so that a warp pushes to contiguous memory, and nested
   adjoint calls stack their entries in the thread's column. Use it when a loop's checkpoints are
   too long for thread-local memory, which CUDA reserves for every thread that can be resident.
 - **GPU-safe adjoint accumulation**: adjoints of shared arrays use `atomicAdd`, while
@@ -166,7 +166,7 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   passive (no adjoint argument). Make a quantity an array if its derivative is needed.
 - `if` conditions are re-evaluated in the reverse sweep, so a branch must not reassign a
   variable that its own condition reads.
-- Local arrays are analysed by name. Inside a loop, an array passed whole (to a call, to a
+- Local arrays are analyzed by name. Inside a loop, an array passed whole (to a call, to a
   pointer) is treated as written and read; writes made later through a pointer that was taken
   outside the loop are not seen, so do not alias a local array with a local pointer.
 - Integer locals are not taped: give a reassigned integer local a new variable for each
@@ -228,7 +228,14 @@ compiled for the host, so no GPU is needed to run it.
   device-function calls, `atomicAdd` scatter.
 - `examples/` — kernels from CuDAFLOW: conservative-to-primitive conversion and cell
   volumes, plus small applications driven by the generated adjoints: mesh shape
-  optimisation, NACA 0012 inverse design, and Spalart–Allmaras field inversion (FIML).
+  optimization, NACA 0012 inverse design, and Spalart–Allmaras field inversion (FIML).
+- `examples/srhd/` — one- and two-dimensional special-relativistic hydrodynamics in plain
+  CUDA, whose conservative-to-primitive step is a per-cell root solve (Newton or bisection),
+  with optional implicit cooling, and host drivers for the discrete adjoint of the whole
+  time integration. `research/srhd/` holds the experiments of the accompanying manuscript
+  (verification against analytic and 50-digit references, GPU comparison with Enzyme, Clad
+  and JAX/Optimistix, inverse problems); `bash research/srhd/reproduce_all.sh` regenerates
+  every table and figure.
 
 ## License
 

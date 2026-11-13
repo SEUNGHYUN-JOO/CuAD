@@ -81,7 +81,7 @@ __global__ void c2p2_newton_b(const double * U, double *U_b, double * P, double 
         }
         double _cuad_fr = 0, _cuad_fs = 0;
         _cuad_fr = fmax(_cuad_fr, fabs((double)(p - _cuad_f4_p))); _cuad_fs = fmax(_cuad_fs, fabs((double)_cuad_f4_p)); p = _cuad_f4_p;
-        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs) cuad_solve_fail();
+        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs + CUAD_SOLVE_ATOL) cuad_solve_fail();
       }
       int _cuad_ok4 = 0;
       for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {
@@ -289,7 +289,7 @@ __global__ void c2p2_bisect_b(const double * U, double *U_b, double * P, double 
     lo_b += (0.5)*(p_b);
     hi_b += (0.5)*(p_b);
     { // cuad: implicit adjoint of the bracketing loop at line 44: its result is the root of r = (f) - (0) in m; the inputs get -r_p s / r_m
-      if (fmax((double)lo, (double)hi) - fmin((double)lo, (double)hi) > CUAD_SOLVE_TOL * fmax(fabs(fmax((double)lo, (double)hi)), fabs(fmin((double)lo, (double)hi)))) cuad_solve_fail();
+      if (fmax((double)lo, (double)hi) - fmin((double)lo, (double)hi) > CUAD_SOLVE_TOL * fmax(fabs(fmax((double)lo, (double)hi)), fabs(fmin((double)lo, (double)hi))) + CUAD_SOLVE_ATOL) cuad_solve_fail();
       double _cuad_s4 = lo_b + hi_b;
       lo_b = 0;
       hi_b = 0;
@@ -336,7 +336,7 @@ __global__ void c2p2_bisect_b(const double * U, double *U_b, double * P, double 
         m_b += E_b;
         _cuad_r4 = m_b;
       }
-      if (fabs((double)((f) - (0))) <= CUAD_SOLVE_TOL * fabs((double)(_cuad_r4 * m))) {
+      if (fabs((double)((f) - (0))) <= fabs((double)_cuad_r4) * (CUAD_SOLVE_TOL * fabs((double)m) + CUAD_SOLVE_ATOL)) {
         m_b = 0;
         E_b = 0;
         W_b = 0;

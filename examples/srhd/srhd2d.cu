@@ -1,7 +1,7 @@
 // Two-dimensional special-relativistic hydrodynamics (c = 1), ideal gas p = (gam - 1) rho eps.
 // nx x ny cells, cell c = j*nx + i. Conserved U = (D, Sx, Sy, tau), primitives P = (rho, ux, uy, p) with the
 // spatial four-velocity u = W v; four planes of N = nx*ny values each (plane k at offset k*N).
-// Outflow boundaries by clamping neighbour indices. Fluxes: x faces (nx+1)*ny, face (i, j) between cells i-1 and i
+// Outflow boundaries by clamping neighbor indices. Fluxes: x faces (nx+1)*ny, face (i, j) between cells i-1 and i
 // of row j; y faces nx*(ny+1), face (i, j) between rows j-1 and j. Minmod-limited linear reconstruction of
 // (rho, ux, uy, p), HLL flux, unsplit SSP-RK2 in the driver. Written as ordinary CUDA.
 

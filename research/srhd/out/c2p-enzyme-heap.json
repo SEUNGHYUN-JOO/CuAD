@@ -1,0 +1,47 @@
+[
+  {
+    "n": 4096,
+    "c2p": "newton",
+    "min_heap_mib_power_of_two": 1
+  },
+  {
+    "n": 4096,
+    "c2p": "bisection",
+    "min_heap_mib_power_of_two": 8
+  },
+  {
+    "n": 4096,
+    "c2p": "newton_fixed40",
+    "min_heap_mib_power_of_two": 8
+  },
+  {
+    "n": 65536,
+    "c2p": "newton",
+    "min_heap_mib_power_of_two": 32
+  },
+  {
+    "n": 65536,
+    "c2p": "bisection",
+    "min_heap_mib_power_of_two": 128
+  },
+  {
+    "n": 65536,
+    "c2p": "newton_fixed40",
+    "min_heap_mib_power_of_two": 64
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton",
+    "min_heap_mib_power_of_two": 32
+  },
+  {
+    "n": 1048576,
+    "c2p": "bisection",
+    "min_heap_mib_power_of_two": 128
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton_fixed40",
+    "min_heap_mib_power_of_two": 64
+  }
+]

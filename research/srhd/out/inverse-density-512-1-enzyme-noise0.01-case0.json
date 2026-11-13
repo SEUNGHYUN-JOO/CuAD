@@ -1,0 +1,133 @@
+{
+  "summary": {
+    "case": 0,
+    "gradient": "enzyme",
+    "n": 512,
+    "unknowns": 435,
+    "steps": 768,
+    "c2p": "bisection",
+    "noise": 0.01,
+    "beta": 1e-06,
+    "observation_times": [
+      0.15,
+      0.3,
+      0.45,
+      0.6
+    ],
+    "iterations": 25,
+    "objective_evaluations": 122,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "objective_initial": 0.05506609029223538,
+    "objective_final": 0.0007595410966618854,
+    "misfit_of_the_truth": 0.0007631090221210107,
+    "rel_l2_error_rho0_final": 0.04152553547579675,
+    "wall_s": 458.60712361335754,
+    "solves": 122,
+    "gpu_forward_ms_total": 0.0,
+    "gpu_reverse_ms_total": 0.0,
+    "gradient_checks": [
+      {
+        "h": 1e-05,
+        "rel_error": 0.35089922809765345
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 0.35094725029568763
+      },
+      {
+        "h": 1e-05,
+        "rel_error": 1.2828561051917655
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 1.2829003811752444
+      },
+      {
+        "h": 1e-05,
+        "rel_error": 0.39986152171606193
+      },
+      {
+        "h": 1e-06,
+        "rel_error": 0.39989371679741326
+      }
+    ],
+    "fd_gradient_cost": "2 x 435 forward solves per gradient"
+  },
+  "history": [
+    {
+      "rel_l2_error_rho0": 0.6908617971639976
+    },
+    {
+      "rel_l2_error_rho0": 0.3319232850753521
+    },
+    {
+      "rel_l2_error_rho0": 0.12106952917954265
+    },
+    {
+      "rel_l2_error_rho0": 0.10226797713703745
+    },
+    {
+      "rel_l2_error_rho0": 0.08389436541802459
+    },
+    {
+      "rel_l2_error_rho0": 0.06762501238019951
+    },
+    {
+      "rel_l2_error_rho0": 0.052971726128233754
+    },
+    {
+      "rel_l2_error_rho0": 0.04699492082978634
+    },
+    {
+      "rel_l2_error_rho0": 0.043281163495506696
+    },
+    {
+      "rel_l2_error_rho0": 0.04274400664533532
+    },
+    {
+      "rel_l2_error_rho0": 0.04353202258237804
+    },
+    {
+      "rel_l2_error_rho0": 0.043296580081111105
+    },
+    {
+      "rel_l2_error_rho0": 0.04204580229616427
+    },
+    {
+      "rel_l2_error_rho0": 0.04169959068674461
+    },
+    {
+      "rel_l2_error_rho0": 0.041546380233089965
+    },
+    {
+      "rel_l2_error_rho0": 0.04152290289992238
+    },
+    {
+      "rel_l2_error_rho0": 0.04150204316499533
+    },
+    {
+      "rel_l2_error_rho0": 0.04148714696984839
+    },
+    {
+      "rel_l2_error_rho0": 0.04148084050491257
+    },
+    {
+      "rel_l2_error_rho0": 0.04147827101067068
+    },
+    {
+      "rel_l2_error_rho0": 0.041473629837736295
+    },
+    {
+      "rel_l2_error_rho0": 0.04147377818925241
+    },
+    {
+      "rel_l2_error_rho0": 0.0414813602962354
+    },
+    {
+      "rel_l2_error_rho0": 0.04152553547579623
+    },
+    {
+      "rel_l2_error_rho0": 0.04152553547579675
+    }
+  ]
+}

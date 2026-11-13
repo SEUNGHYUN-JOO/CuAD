@@ -1,0 +1,409 @@
+[
+  {
+    "n": 4096,
+    "c2p": "newton",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.1395840048789978,
+    "min_ms": 0.13779200613498688,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 4096,
+    "c2p": "newton",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 0.19091199338436127,
+    "min_ms": 0.16435199975967407,
+    "registers": 114,
+    "local_bytes": 0,
+    "dot_test_rel_error": 4.385793680240907e-10
+  },
+  {
+    "n": 4096,
+    "c2p": "newton",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 9.234848022460938,
+    "min_ms": 8.665984153747559,
+    "registers": 128,
+    "local_bytes": 0,
+    "dot_test_rel_error": 4.3857972358756534e-10
+  },
+  {
+    "n": 4096,
+    "c2p": "newton",
+    "tool": "manual",
+    "status": 0,
+    "median_ms": 0.14640000462532043,
+    "min_ms": 0.1457280069589615,
+    "registers": 64,
+    "local_bytes": 0,
+    "dot_test_rel_error": 4.3858007915104e-10
+  },
+  {
+    "n": 4096,
+    "c2p": "bisection",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.17484800517559052,
+    "min_ms": 0.1732800006866455,
+    "registers": 48,
+    "local_bytes": 0
+  },
+  {
+    "n": 4096,
+    "c2p": "bisection",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 0.18905599415302277,
+    "min_ms": 0.1860480010509491,
+    "registers": 92,
+    "local_bytes": 0,
+    "dot_test_rel_error": 5.063517272253534e-10
+  },
+  {
+    "n": 4096,
+    "c2p": "bisection",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 35.73417663574219,
+    "min_ms": 34.01638412475586,
+    "registers": 128,
+    "local_bytes": 0,
+    "dot_test_rel_error": 0.9144338676525714
+  },
+  {
+    "n": 4096,
+    "c2p": "newton_fixed40",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.18486399948596954,
+    "min_ms": 0.18166400492191315,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 4096,
+    "c2p": "newton_fixed40",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 0.969215989112854,
+    "min_ms": 0.9676799774169922,
+    "registers": 102,
+    "local_bytes": 2048,
+    "dot_test_rel_error": 2.9049373455445073e-10
+  },
+  {
+    "n": 4096,
+    "c2p": "newton_fixed40",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 17.2923526763916,
+    "min_ms": 16.62396812438965,
+    "registers": 128,
+    "local_bytes": 0,
+    "dot_test_rel_error": 2.9049410235696323e-10
+  },
+  {
+    "n": 65536,
+    "c2p": "newton",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.1990399956703186,
+    "min_ms": 0.19644799828529358,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "newton",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 0.362527996301651,
+    "min_ms": 0.3527039885520935,
+    "registers": 114,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "newton",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 112.29798126220703,
+    "min_ms": 109.77337646484375,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "newton",
+    "tool": "manual",
+    "status": 0,
+    "median_ms": 0.22041599452495575,
+    "min_ms": 0.21833600103855133,
+    "registers": 64,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "bisection",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.6567999720573425,
+    "min_ms": 0.654591977596283,
+    "registers": 48,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "bisection",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 0.7442560195922852,
+    "min_ms": 0.7408000230789185,
+    "registers": 92,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "bisection",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 605.8832397460938,
+    "min_ms": 583.42578125,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "newton_fixed40",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 0.7051839828491211,
+    "min_ms": 0.7017599940299988,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 65536,
+    "c2p": "newton_fixed40",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 3.821023941040039,
+    "min_ms": 3.808511972427368,
+    "registers": 102,
+    "local_bytes": 2048
+  },
+  {
+    "n": 65536,
+    "c2p": "newton_fixed40",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 171.60166931152344,
+    "min_ms": 165.8260498046875,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 1.5475200414657593,
+    "min_ms": 1.5432319641113281,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 2.836479902267456,
+    "min_ms": 2.810368061065674,
+    "registers": 114,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 2240.100341796875,
+    "min_ms": 2135.38916015625,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton",
+    "tool": "manual",
+    "status": 0,
+    "median_ms": 1.9615360498428345,
+    "min_ms": 1.9353599548339844,
+    "registers": 64,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "bisection",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 7.948575973510742,
+    "min_ms": 7.943647861480713,
+    "registers": 48,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "bisection",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 8.704832077026367,
+    "min_ms": 8.698335647583008,
+    "registers": 92,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "bisection",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 6094.11083984375,
+    "min_ms": 6077.05859375,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton_fixed40",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 8.528512001037598,
+    "min_ms": 8.527104377746582,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton_fixed40",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 47.127967834472656,
+    "min_ms": 46.718238830566406,
+    "registers": 102,
+    "local_bytes": 2048
+  },
+  {
+    "n": 1048576,
+    "c2p": "newton_fixed40",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 1006.4181518554688,
+    "min_ms": 962.57177734375,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 5.87059211730957,
+    "min_ms": 5.864448070526123,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 10.816512107849121,
+    "min_ms": 10.789888381958008,
+    "registers": 114,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 8607.5869140625,
+    "min_ms": 8520.763671875,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton",
+    "tool": "manual",
+    "status": 0,
+    "median_ms": 8.032256126403809,
+    "min_ms": 7.994976043701172,
+    "registers": 64,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "bisection",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 32.16896057128906,
+    "min_ms": 31.702016830444336,
+    "registers": 48,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "bisection",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 34.52422332763672,
+    "min_ms": 34.51801681518555,
+    "registers": 92,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "bisection",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 23076.21875,
+    "min_ms": 22862.158203125,
+    "registers": 128,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton_fixed40",
+    "tool": "primal",
+    "status": 0,
+    "median_ms": 34.11967849731445,
+    "min_ms": 34.0766716003418,
+    "registers": 52,
+    "local_bytes": 0
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton_fixed40",
+    "tool": "cuad",
+    "status": 0,
+    "median_ms": 187.81417846679688,
+    "min_ms": 187.4534454345703,
+    "registers": 102,
+    "local_bytes": 2048
+  },
+  {
+    "n": 4194304,
+    "c2p": "newton_fixed40",
+    "tool": "enzyme",
+    "status": 0,
+    "median_ms": 3817.700927734375,
+    "min_ms": 3627.43408203125,
+    "registers": 128,
+    "local_bytes": 0
+  }
+]

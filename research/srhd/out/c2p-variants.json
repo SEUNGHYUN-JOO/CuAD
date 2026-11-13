@@ -1,0 +1,74 @@
+[
+  {
+    "solver": "newton",
+    "tool": "cuad",
+    "states": 143,
+    "primal_accurate_states": 102,
+    "jacobian_error_median": 8.238052228750569e-14,
+    "jacobian_error_max": 1.1837245934824435e-09,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "newton",
+    "tool": "enzyme",
+    "states": 143,
+    "primal_accurate_states": 102,
+    "jacobian_error_median": 8.234048257348063e-14,
+    "jacobian_error_max": 1.1818579592791503e-09,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "bisection",
+    "tool": "cuad",
+    "states": 143,
+    "primal_accurate_states": 103,
+    "jacobian_error_median": 7.021056969538549e-14,
+    "jacobian_error_max": 8.565053723242269e-10,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "bisection",
+    "tool": "enzyme",
+    "states": 143,
+    "primal_accurate_states": 103,
+    "jacobian_error_median": 0.40931713388182706,
+    "jacobian_error_max": 0.9990139240978385,
+    "states_with_error_above_1e_6": 92
+  },
+  {
+    "solver": "illinois",
+    "tool": "cuad",
+    "states": 143,
+    "primal_accurate_states": 104,
+    "jacobian_error_median": 7.412736349982947e-14,
+    "jacobian_error_max": 1.0956954175694449e-09,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "illinois",
+    "tool": "enzyme",
+    "states": 143,
+    "primal_accurate_states": 104,
+    "jacobian_error_median": 1.5346646146626554e-13,
+    "jacobian_error_max": 1.0956280451533663e-09,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "brent",
+    "tool": "cuad",
+    "states": 143,
+    "primal_accurate_states": 104,
+    "jacobian_error_median": 6.366500511192476e-14,
+    "jacobian_error_max": 8.565053723241528e-10,
+    "states_with_error_above_1e_6": 0
+  },
+  {
+    "solver": "brent",
+    "tool": "enzyme",
+    "states": 143,
+    "primal_accurate_states": 104,
+    "jacobian_error_median": 2.6396231817188284e-13,
+    "jacobian_error_max": 2.906540896107261e-09,
+    "states_with_error_above_1e_6": 0
+  }
+]
