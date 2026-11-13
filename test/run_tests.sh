@@ -68,6 +68,12 @@ g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/ver
 test/out/verify_convergence || fail=1
 
 echo
+echo "=== MULTI-STATE ROOT FINDERS (secant, Illinois, Brent): residual found in the loop, adjoint vs exact ==="
+"$CUAD" -r test/reverse_only/rootfinders.cu > test/out/rootfinders_b.cuh
+g++ -O2 -std=c++17 -Itest test/verify_rootfinders.cpp -o test/out/verify_rootfinders
+test/out/verify_rootfinders || fail=1
+
+echo
 echo "=== CONVERGENCE-LOOP POLICY: loops that stop away from a fixed point trap; non-solve loops are rejected ==="
 "$CUAD" -r test/reverse_only/solve_policy.cu > test/out/solve_policy_b.cuh
 g++ -O2 -std=c++17 -Itest test/verify_solve_policy.cpp -o test/out/verify_solve_policy

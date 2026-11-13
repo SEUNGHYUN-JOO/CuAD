@@ -1392,6 +1392,18 @@ private:
     std::vector<const VarDecl *> state, params;
     const IfStmt *sel = nullptr;             // bracketing: the branch that moves a bound
     const VarDecl *trial = nullptr;          // bracketing: the trial point that both arms assign
+    // root-finding loops with several iterated variables (secant, regula falsi, Brent): candidate residuals, values
+    // computed in one iteration from a single trial point and the inputs; at run time the first one that vanishes at
+    // the exit state defines the root
+    struct Residual {
+      const VarDecl *var = nullptr;          // the variable the residual is stored in
+      const Expr *expr = nullptr;            // its defining expression
+      const VarDecl *trialVar = nullptr;     // the one iterated or trial variable it is evaluated at
+      std::vector<const Stmt *> trialDecls;  // body declarations that recompute a trial local from the state
+      std::vector<const Stmt *> slice;       // body declarations between the trial and the residual
+    };
+    bool residual = false;
+    std::vector<Residual> res;
   };
   mutable std::map<const ForStmt *, SolveInfo> solve_;
 
@@ -1568,8 +1580,12 @@ private:
     for (const VarDecl *v : si.state)
       if (dep.count(v))
         smooth = true;
-    if (smooth)
+    if (smooth) {
+      if (si.state.size() > 1)
+        findResiduals(si, inner, dep);
+      si.residual = !si.res.empty();
       return "";
+    }
     // bracketing: one if/else whose arms only assign the same trial local to state variables
     si.bracket = true;
     std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), seen;
@@ -1618,6 +1634,218 @@ private:
     return "";
   }
 
+  // Candidate residuals of a multi-state root-finding loop. A value computed in one iteration (a top-level declaration
+  // or a top-level assignment) is a candidate if it depends on the inputs and, through the body's declarations, on
+  // exactly one iterated variable or one trial local that is itself computed from iterated variables alone (the point
+  // at which the function is evaluated). Body locals that are reassigned, or values read from other iterations
+  // through anything but that one variable, disqualify it.
+  void findResiduals(SolveInfo &si, const std::set<const VarDecl *> &inner, const std::set<const VarDecl *> &dep) const {
+    std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), paramSet(si.params.begin(), si.params.end());
+    std::map<const VarDecl *, const DeclStmt *> declOf;
+    std::set<const VarDecl *> reassigned;
+    for (const Stmt *s : si.iter)
+      if (const auto *ds = dyn_cast<DeclStmt>(s))
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            declOf[vd] = ds;
+    std::function<void(const Stmt *)> assigns = [&](const Stmt *s) {
+      if (!s)
+        return;
+      const Expr *lhs = nullptr;
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp())
+          lhs = bo->getLHS();
+      if (const auto *uo = dyn_cast<UnaryOperator>(s))
+        if (uo->isIncrementDecrementOp())
+          lhs = uo->getSubExpr();
+      if (lhs)
+        if (const auto *d = dyn_cast<DeclRefExpr>(lhs->IgnoreParenImpCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+            if (inner.count(vd))
+              reassigned.insert(vd);
+      for (const Stmt *c : s->children())
+        assigns(c);
+    };
+    for (const Stmt *s : si.iter)
+      assigns(s);
+    // walk an expression's dependencies: inputs, iterated variables, and body locals followed through their
+    // initialisers; a body local computed from iterated variables alone is a frontier point (a trial local)
+    struct Walk { bool inputs = false, bad = false; std::set<const VarDecl *> frontier, sliceLocals, trialLocals; };
+    std::function<void(const Expr *, Walk &)> walk;
+    std::function<bool(const VarDecl *)> pureState = [&](const VarDecl *vd) {
+      // a body local whose initialiser reaches iterated variables but no inputs
+      if (!declOf.count(vd) || reassigned.count(vd) || !vd->hasInit())
+        return false;
+      Walk w;
+      walk(vd->getInit(), w);
+      return !w.bad && !w.inputs;
+    };
+    walk = [&](const Expr *e, Walk &w) {
+      std::set<const VarDecl *> refs;
+      solveRefs(e, refs);
+      for (const VarDecl *vd : refs) {
+        if (paramSet.count(vd) || (!inner.count(vd) && !stateSet.count(vd) && Act.isVaried(vd))) {
+          w.inputs = true;
+        } else if (stateSet.count(vd)) {
+          w.frontier.insert(vd);
+        } else if (inner.count(vd)) {
+          if (!declOf.count(vd) || reassigned.count(vd) || !vd->hasInit()) {
+            if (vd->getType()->isRealFloatingType())
+              w.bad = true; // a floating body local without a single definition
+            else if (reassigned.count(vd) || !declOf.count(vd))
+              w.bad = true; // e.g. the loop counter: the function would change between iterations
+            continue;
+          }
+          if (pureState(vd)) {
+            w.frontier.insert(vd);
+            w.trialLocals.insert(vd);
+            continue;
+          }
+          if (!w.sliceLocals.count(vd)) {
+            w.sliceLocals.insert(vd);
+            walk(vd->getInit(), w);
+          }
+        }
+      }
+    };
+    auto inOrder = [&](const std::set<const VarDecl *> &vars) {
+      std::vector<const Stmt *> out;
+      for (const Stmt *s : si.iter)
+        if (const auto *ds = dyn_cast<DeclStmt>(s)) {
+          bool any = false;
+          for (const Decl *d : ds->decls())
+            if (const auto *vd = dyn_cast<VarDecl>(d))
+              if (vars.count(vd))
+                any = true;
+          if (any)
+            out.push_back(ds);
+        }
+      return out;
+    };
+    auto consider = [&](const VarDecl *var, const Expr *e) {
+      if (!var || !e || !isFloatScalar(var) || !dep.count(var))
+        return;
+      Walk w;
+      walk(e, w);
+      if (w.bad || !w.inputs || w.frontier.size() != 1)
+        return;
+      SolveInfo::Residual r;
+      r.var = var;
+      r.expr = e;
+      r.trialVar = *w.frontier.begin();
+      r.slice = inOrder(w.sliceLocals);
+      if (w.trialLocals.count(r.trialVar)) {
+        // the trial local and the pure-state locals its initialiser uses, recomputed from the exit state
+        std::set<const VarDecl *> need{r.trialVar};
+        std::function<void(const Expr *)> grow = [&](const Expr *x) {
+          std::set<const VarDecl *> refs;
+          solveRefs(x, refs);
+          for (const VarDecl *vd : refs)
+            if (declOf.count(vd) && !need.count(vd)) {
+              need.insert(vd);
+              grow(vd->getInit());
+            }
+        };
+        grow(r.trialVar->getInit());
+        r.trialDecls = inOrder(need);
+      }
+      si.res.push_back(r);
+    };
+    for (const Stmt *s : si.iter) {
+      if (const auto *ds = dyn_cast<DeclStmt>(s)) {
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            if (vd->hasInit() && !reassigned.count(vd))
+              consider(vd, vd->getInit());
+      } else if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
+        if (bo->getOpcode() == BO_Assign)
+          if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+            consider(dyn_cast<VarDecl>(d->getDecl()), bo->getRHS());
+      }
+    }
+  }
+
+  // Adjoint of a multi-state root-finding loop through the residual found at run time (see findResiduals).
+  std::string residualAdjoint(const ForStmt *fs, const SolveInfo &si, int depth) const {
+    const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
+    const std::string id = std::to_string(tmp_++);
+    const std::string line = std::to_string(SM.getSpellingLineNumber(fs->getBeginLoc()));
+    auto T = [&](const VarDecl *v) { return tstr(v->getType().getNonReferenceType().getUnqualifiedType()); };
+    std::string out = ind + "{ // cuad: implicit adjoint of the root-finding loop at line " + line +
+                      ": the result is a root of the first residual that vanishes at the exit state, among";
+    for (const auto &r : si.res)
+      out += " " + r.var->getNameAsString() + "(" + r.trialVar->getNameAsString() + ")";
+    out += "\n";
+    out += i1 + "int _cuad_use" + id + " = -1;\n" + i1 + "double _cuad_x" + id + " = 0, _cuad_rt" + id + " = 0;\n";
+    auto localsOf = [&](const std::vector<const Stmt *> &stmts) {
+      std::vector<const VarDecl *> v;
+      for (const Stmt *s : stmts)
+        for (const Decl *d : cast<DeclStmt>(s)->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            if (Act.isVaried(vd) && isFloatScalar(vd))
+              v.push_back(vd);
+      return v;
+    };
+    // one candidate: recompute its trial and slice from the exit state; seed `seed` into the residual and reverse
+    // the slice; the trial's adjoint is left in `trialOut` (or discarded)
+    auto pass = [&](const SolveInfo::Residual &r, const std::string &seed, const std::string &trialOut, bool shadowParams,
+                    const std::string &in, int dp) {
+      std::string o;
+      for (const Stmt *s : r.trialDecls)
+        o += genPrimal(s, dp);
+      for (const Stmt *s : r.slice)
+        o += genPrimal(s, dp);
+      if (shadowParams)
+        o += shadowAdj(si.params, in);
+      o += in + T(r.trialVar) + " " + r.trialVar->getNameAsString() + "_b = 0;\n";
+      o += shadowAdj(localsOf(r.slice), in);
+      pushAdj(r.expr, seed, o, in);
+      for (auto it = r.slice.rbegin(); it != r.slice.rend(); ++it)
+        o += reverseStmt(*it, dp);
+      if (!trialOut.empty())
+        o += in + trialOut + " = " + r.trialVar->getNameAsString() + "_b;\n";
+      return o;
+    };
+    bool saved = noPush_;
+    noPush_ = true;
+    for (size_t k = 0; k < si.res.size(); ++k) {
+      const auto &r = si.res[k];
+      out += i1 + "if (_cuad_use" + id + " < 0) {\n";
+      out += i2 + "double _cuad_R, _cuad_Rt;\n" + i2 + "{\n";
+      std::string o;
+      for (const Stmt *s : r.trialDecls)
+        o += genPrimal(s, depth + 3);
+      for (const Stmt *s : r.slice)
+        o += genPrimal(s, depth + 3);
+      out += o + i3 + "_cuad_R = " + prim(r.expr) + ";\n" + i2 + "}\n";
+      out += i2 + "{\n" + pass(r, "1", "_cuad_Rt", true, i3, depth + 3) + i2 + "}\n";
+      out += i2 + "{\n";
+      for (const Stmt *s : r.trialDecls)
+        out += genPrimal(s, depth + 3);
+      out += i3 + "if (_cuad_Rt != 0 && fabs(_cuad_R) <= CUAD_SOLVE_TOL * fabs(_cuad_Rt * " + r.trialVar->getNameAsString() +
+             ")) { _cuad_use" + id + " = " + std::to_string(k) + "; _cuad_x" + id + " = " +
+             r.trialVar->getNameAsString() + "; _cuad_rt" + id + " = _cuad_Rt; }\n" + i2 + "}\n" + i1 + "}\n";
+    }
+    out += i1 + "if (_cuad_use" + id + " < 0) cuad_solve_fail();\n";
+    // the seeds of the iterated variables: those at the root are summed; values that vanish at the root (residuals,
+    // step sizes) carry no derivative; any other seeded variable means the result is not a function of the root
+    out += i1 + "double _cuad_s" + id + " = 0;\n";
+    for (const VarDecl *v : si.state) {
+      std::string x = v->getNameAsString();
+      out += i1 + "if (" + x + "_b != 0) {\n";
+      out += i2 + "if (fabs((double)" + x + " - _cuad_x" + id + ") <= CUAD_SOLVE_TOL * fabs(_cuad_x" + id + ")) _cuad_s" + id +
+             " += " + x + "_b;\n";
+      out += i2 + "else if (!(fabs((double)" + x + ") <= CUAD_SOLVE_TOL * (fabs(_cuad_x" + id + ") + fabs(_cuad_rt" + id +
+             " * _cuad_x" + id + ")))) cuad_solve_fail();\n";
+      out += i2 + x + "_b = 0;\n" + i1 + "}\n";
+    }
+    for (size_t k = 0; k < si.res.size(); ++k)
+      out += i1 + "if (_cuad_use" + id + " == " + std::to_string(k) + ") {\n" +
+             pass(si.res[k], "-(_cuad_s" + id + ") / (_cuad_rt" + id + ")", "", false, i2, depth + 2) + i1 + "}\n";
+    noPush_ = saved;
+    return out + ind + "}\n";
+  }
+
   // A loop recognised as a convergence loop may still have left through its `break` for another reason (a
   // threshold, an iteration cap): then its result is not a fixed point and the implicit adjoint would be the
   // derivative of a different quantity. One more iteration from the exit state must not move it by more than
@@ -1655,6 +1883,8 @@ private:
   }
 
   std::string solveAdjoint(const ForStmt *fs, const SolveInfo &si, int depth) const {
+    if (si.residual)
+      return residualAdjoint(fs, si, depth);
     const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
     const std::string id = std::to_string(tmp_++);
     const std::string line = std::to_string(SM.getSpellingLineNumber(fs->getBeginLoc()));

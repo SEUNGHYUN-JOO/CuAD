@@ -11,6 +11,23 @@ static Dim3 blockIdx, threadIdx;
 static struct { unsigned x = 1, y = 1, z = 1; } blockDim, gridDim;
 #include "srhd.cu"
 
+// Any initial primitive field W0 = (rho, u, p) on [0, 1], fixed dt = cfl*dx; primitives at t = steps*dt in P.
+extern "C" void srhd_run_field(int n, int steps, double cfl, double gam, const double *W0, int solver, double *P) {
+  std::vector<double> U(3 * n), U1(3 * n), U2(3 * n), F(3 * (n + 1)), W(3 * n);
+  const double g[1] = {gam};
+  p2c(W0, U.data(), g, n);
+  for (int s = 0; s < steps; ++s) {
+    if (solver == 0) c2p_newton(U.data(), W.data(), g, n); else c2p_bisect(U.data(), W.data(), g, n);
+    hll_flux(W.data(), F.data(), g, n);
+    rk_stage(U.data(), U.data(), F.data(), U1.data(), 0.0, 1.0, cfl, n);
+    if (solver == 0) c2p_newton(U1.data(), W.data(), g, n); else c2p_bisect(U1.data(), W.data(), g, n);
+    hll_flux(W.data(), F.data(), g, n);
+    rk_stage(U.data(), U1.data(), F.data(), U2.data(), 0.5, 0.5, cfl, n);
+    U.swap(U2);
+  }
+  if (solver == 0) c2p_newton(U.data(), P, g, n); else c2p_bisect(U.data(), P, g, n);
+}
+
 // Riemann problem on [0,1], interface at 0.5, fixed dt = cfl*dx (signal speeds are below c = 1).
 // solver: 0 = Newton C2P, 1 = bisection C2P. Returns the primitives at t = steps*dt in P[3n].
 extern "C" void srhd_run(int n, int steps, double cfl, double gam, double rhoL, double uL, double pL,

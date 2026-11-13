@@ -137,8 +137,13 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   one iteration, Christianson's method) and then p_b += G_p^T l. A bracketing update, where
   the inputs reach the bracket only through the branch `if (r(m) > 0) lo = m; else hi = m;`,
   gets p_b -= r_p s / r_m: differentiating its iterations would give the derivative of the
-  initial bracket, not of the root. Loops that change memory, call user functions or nest
-  other loops are rejected.
+  initial bracket, not of the root. A loop with several iterated variables (secant, regula
+  falsi, Brent) is differentiated through the residual it evaluates: a value computed from one
+  trial point and the inputs, chosen at run time as the first that vanishes at the exit state.
+  Loops that change memory, call user functions or nest other loops are rejected. At run time
+  the exit state must be a fixed point, a collapsed bracket or a root (`CUAD_SOLVE_TOL`,
+  relative, default 1e-6), otherwise the adjoint traps; a bracket that collapses onto a bound
+  because the root lies outside it gives that bound's derivative.
 - **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator
   statements, bare `{ ... }` blocks.
