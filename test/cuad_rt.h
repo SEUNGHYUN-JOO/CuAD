@@ -75,11 +75,17 @@ static CUAD_DEVVAR double *cuad_gtape = 0;
 static CUAD_DEVVAR int *cuad_gtop = 0;
 static CUAD_DEVVAR long long cuad_gstride = 0;
 static CUAD_DEVVAR int cuad_gcap = 0;
+#if defined(__CUDACC__)
+// One host/device function: CUDA front ends also check device code in the host pass. The global
+// tape is device memory, so a CUDA build that runs a *_b function on the host traps (index -1).
+static __host__ __device__ __forceinline__ long long cuad_tid() {
 #if defined(__CUDA_ARCH__)
-static __device__ __forceinline__ long long cuad_tid() {
   const long long block = ((long long)blockIdx.z * gridDim.y + blockIdx.y) * gridDim.x + blockIdx.x;
   return block * ((long long)blockDim.x * blockDim.y * blockDim.z) +
          ((long long)threadIdx.z * blockDim.y + threadIdx.y) * blockDim.x + threadIdx.x;
+#else
+  return -1;
+#endif
 }
 #else
 // Host builds emulate threads: each host thread sets its own index.
