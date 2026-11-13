@@ -26,14 +26,32 @@
 #else
 #define cuad_tape_fail() std::abort()
 #endif
+// -DCUAD_TAPE_PROFILE (host builds): record the deepest tape position reached in
+// cuad_tape_peak, which the including program defines (`long long cuad_tape_peak;`).
+#if defined(CUAD_TAPE_PROFILE) && !defined(__CUDA_ARCH__)
+extern long long cuad_tape_peak;
+#define cuad_tape_note() do { if (_cuad_tp > cuad_tape_peak) cuad_tape_peak = _cuad_tp; } while (0)
+#else
+#define cuad_tape_note() do {} while (0)
+#endif
 #define cuad_push(v) do { \
   if (_cuad_tp < 0 || _cuad_tp >= CUAD_TAPE_SIZE) cuad_tape_fail(); \
   _cuad_tape[_cuad_tp++] = (v); \
+  cuad_tape_note(); \
 } while (0)
 #define cuad_pop(v) do { \
   if (_cuad_tp <= 0 || _cuad_tp > CUAD_TAPE_SIZE) cuad_tape_fail(); \
   (v) = _cuad_tape[--_cuad_tp]; \
 } while (0)
+
+// Bounds of the element ranges that a loop's per-iteration checkpoint saves (see ReverseMode.h).
+#if defined(__CUDACC__)
+#define CUAD_HD __host__ __device__
+#else
+#define CUAD_HD
+#endif
+static inline CUAD_HD long long cuad_imin(long long a, long long b) { return a < b ? a : b; }
+static inline CUAD_HD long long cuad_imax(long long a, long long b) { return a > b ? a : b; }
 
 #if !defined(__CUDACC__)
 static inline double atomicAdd(double *a, double v) {

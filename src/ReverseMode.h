@@ -31,6 +31,8 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
+#include <cctype>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -103,6 +105,7 @@ public:
   std::string genFunction(const FunctionDecl *FD) {
     Act = Activity();
     Act.run(FD);
+    curBody_ = FD->getBody();
     taped_.clear();
     reused_.clear();
     arrayTaped_.clear();
@@ -1374,6 +1377,314 @@ private:
     elem = qt;
     return n;
   }
+  // ---- the region a loop iteration can write: one index interval per write site ----
+  //
+  // Checkpointing a carried array whole costs its declared size per iteration (an LSTM state declared
+  // [256] of which 2*l*b elements are used). Only the elements the iteration may write need saving: the
+  // others hold the same value at the top of every iteration and through every re-run in the reverse sweep.
+  // For each write a[idx] the interval of idx is computed symbolically from the ranges of the variables in
+  // it and evaluated at run time at the top of the iteration - identically in the forward and the backward
+  // loop, because it may use only the loop's own induction variable, induction variables of loops enclosing
+  // it (fixed while it runs and while it is reversed), variables the function never modifies, and the
+  // induction variables (and initialised locals) of loops inside the body, through their bounds. Any other
+  // index - an array read, a call, %, / - makes the whole array the region.
+  using Interval = std::pair<std::string, std::string>; // [lo, hi] as C expressions
+  const Stmt *curBody_ = nullptr;
+  mutable bool rangeWhole_ = false; // range L's own counter over all its iterations (evaluated at loop entry)
+  // v is assigned, incremented or has its address taken in s (its declaration does not count)
+  static bool reassignedIn(const Stmt *s, const VarDecl *v) {
+    if (!s)
+      return false;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+          if (d->getDecl() == v)
+            return true;
+    if (const auto *uo = dyn_cast<UnaryOperator>(s))
+      if (uo->isIncrementDecrementOp() || uo->getOpcode() == UO_AddrOf)
+        if (const auto *d = dyn_cast<DeclRefExpr>(uo->getSubExpr()->IgnoreParenImpCasts()))
+          if (d->getDecl() == v)
+            return true;
+    for (const Stmt *c : s->children())
+      if (reassignedIn(c, v))
+        return true;
+    return false;
+  }
+  static bool isPoint(const Interval &r) { return r.first == r.second; }
+  static bool asInt(const std::string &s, long long &v) {
+    if (s.empty())
+      return false;
+    size_t i = s[0] == '-' ? 1 : 0;
+    if (i == s.size())
+      return false;
+    for (size_t j = i; j < s.size(); ++j)
+      if (s[j] < '0' || s[j] > '9')
+        return false;
+    v = std::stoll(s);
+    return true;
+  }
+  // x op y as a C expression, folded when both are integer literals and simplified for 0 and 1
+  static std::string foldOp(const std::string &x, char op, const std::string &y) {
+    long long a, b;
+    bool ka = asInt(x, a), kb = asInt(y, b);
+    if (ka && kb)
+      return std::to_string(op == '+' ? a + b : op == '-' ? a - b : a * b);
+    if (op == '+' && ka && a == 0) return y;
+    if ((op == '+' || op == '-') && kb && b == 0) return x;
+    if (op == '*' && ((ka && a == 0) || (kb && b == 0))) return "0";
+    if (op == '*' && ka && a == 1) return y;
+    if (op == '*' && kb && b == 1) return x;
+    auto wrap = [](const std::string &s) {
+      long long t;
+      bool simple = (asInt(s, t) && t >= 0) ||
+                    (!s.empty() && std::all_of(s.begin(), s.end(), [](char ch) {
+                       return std::isalnum((unsigned char)ch) || ch == '_';
+                     }));
+      if (!simple && s.size() > 2 && s.front() == '(' && s.back() == ')') {
+        int depth = 0;
+        simple = true;           // already one parenthesised group?
+        for (size_t i = 0; i < s.size(); ++i) {
+          depth += s[i] == '(' ? 1 : s[i] == ')' ? -1 : 0;
+          if (depth == 0 && i + 1 < s.size()) { simple = false; break; }
+        }
+      }
+      return simple ? s : "(" + s + ")";
+    };
+    return wrap(x) + " " + op + " " + wrap(y);
+  }
+  // the for-statement (within s) whose init declares v, or null
+  static const ForStmt *loopDeclaring(const Stmt *s, const VarDecl *v) {
+    if (!s)
+      return nullptr;
+    if (const auto *fs = dyn_cast<ForStmt>(s))
+      if (const auto *ds = dyn_cast_or_null<DeclStmt>(fs->getInit()))
+        for (const Decl *d : ds->decls())
+          if (d == v)
+            return fs;
+    for (const Stmt *c : s->children())
+      if (const ForStmt *r = loopDeclaring(c, v))
+        return r;
+    return nullptr;
+  }
+  // the declaration statement (within s) of v, or null
+  static const VarDecl *declIn(const Stmt *s, const VarDecl *v) {
+    if (!s)
+      return nullptr;
+    if (const auto *ds = dyn_cast<DeclStmt>(s))
+      for (const Decl *d : ds->decls())
+        if (d == v)
+          return v;
+    for (const Stmt *c : s->children())
+      if (declIn(c, v))
+        return v;
+    return nullptr;
+  }
+  bool rangeOf(const Expr *e, const ForStmt *L, Interval &r, int depth = 0) const {
+    if (!e || depth > 16)
+      return false;
+    e = e->IgnoreParenImpCasts();
+    if (!e->getType()->isIntegerType())
+      return false;
+    Expr::EvalResult cv;
+    if (e->EvaluateAsInt(cv, Ctx)) {
+      r = {std::to_string(cv.Val.getInt().getExtValue()), std::to_string(cv.Val.getInt().getExtValue())};
+      return true;
+    }
+    if (const auto *d = dyn_cast<DeclRefExpr>(e)) {
+      const auto *v = dyn_cast<VarDecl>(d->getDecl());
+      if (!v)
+        return false;
+      std::string nm = v->getNameAsString();
+      const ForStmt *own = nullptr;     // L's own counter, ranged over the whole loop (entry snapshots)
+      if (v == inductionVar(L)) {
+        if (!rangeWhole_) {             // per-iteration checkpoint: its value at the top of the iteration
+          r = {nm, nm};
+          return true;
+        }
+        own = L;
+      }
+      if (withinRange(L->getSourceRange(), v->getLocation())) { // declared in the loop
+        if (const ForStmt *inner = own ? own : loopDeclaring(L->getBody(), v)) {
+          if (inductionVar(inner) != v)
+            return false;
+          const auto *cond =
+              inner->getCond() ? dyn_cast<BinaryOperator>(inner->getCond()->IgnoreImpCasts()) : nullptr;
+          if (!cond || (cond->getOpcode() != BO_LT && cond->getOpcode() != BO_LE))
+            return false;
+          const auto *cl = dyn_cast<DeclRefExpr>(cond->getLHS()->IgnoreParenImpCasts());
+          if (!cl || cl->getDecl() != v)
+            return false;
+          const Expr *inc = inner->getInc() ? inner->getInc()->IgnoreParenImpCasts() : nullptr;
+          bool up = false;
+          if (const auto *u = dyn_cast_or_null<UnaryOperator>(inc))
+            up = u->isIncrementOp();
+          else if (const auto *b = dyn_cast_or_null<BinaryOperator>(inc)) {
+            Expr::EvalResult s;
+            up = b->getOpcode() == BO_AddAssign && b->getRHS()->EvaluateAsInt(s, Ctx) &&
+                 s.Val.getInt().isStrictlyPositive();
+          }
+          Interval a, bnd;
+          if (!up || !rangeOf(v->getInit(), L, a, depth + 1) || !rangeOf(cond->getRHS(), L, bnd, depth + 1))
+            return false;
+          r = {a.first, cond->getOpcode() == BO_LT ? foldOp(bnd.second, '-', "1") : bnd.second};
+          return true;
+        }
+        // an initialised local of the body that is never reassigned: the range of its initialiser
+        if (v->hasInit() && !v->getType()->isReferenceType() && declIn(L->getBody(), v))
+          return !reassignedIn(L->getBody(), v) && rangeOf(v->getInit(), L, r, depth + 1);
+        return false;
+      }
+      if (v->getType()->isReferenceType())
+        return false;
+      // declared outside: the counter of an enclosing loop (fixed while L runs and while it is reversed) ...
+      if (const ForStmt *outer = loopDeclaring(curBody_, v))
+        if (inductionVar(outer) == v && withinRange(outer->getSourceRange(), L->getBeginLoc())) {
+          r = {nm, nm};
+          return true;
+        }
+      // ... or a parameter / initialised local that the function never reassigns
+      if ((isa<ParmVarDecl>(v) || v->hasInit()) && !reassignedIn(curBody_, v)) {
+        r = {nm, nm};
+        return true;
+      }
+      return false;
+    }
+    if (const auto *u = dyn_cast<UnaryOperator>(e)) {
+      Interval a;
+      if (u->getOpcode() == UO_Plus)
+        return rangeOf(u->getSubExpr(), L, r, depth + 1);
+      if (u->getOpcode() == UO_Minus && rangeOf(u->getSubExpr(), L, a, depth + 1)) {
+        r = {foldOp("0", '-', a.second), foldOp("0", '-', a.first)};
+        return true;
+      }
+      return false;
+    }
+    if (const auto *b = dyn_cast<BinaryOperator>(e)) {
+      Interval a, c;
+      if (!rangeOf(b->getLHS(), L, a, depth + 1) || !rangeOf(b->getRHS(), L, c, depth + 1))
+        return false;
+      auto add = [](const std::string &x, const std::string &y) { return foldOp(x, '+', y); };
+      auto sub = [](const std::string &x, const std::string &y) { return foldOp(x, '-', y); };
+      auto mul = [](const std::string &x, const std::string &y) { return foldOp(x, '*', y); };
+      switch (b->getOpcode()) {
+      case BO_Add:
+        r = {add(a.first, c.first), isPoint(a) && isPoint(c) ? "" : add(a.second, c.second)};
+        if (r.second.empty())
+          r.second = r.first;
+        return true;
+      case BO_Sub:
+        r = {sub(a.first, c.second), isPoint(a) && isPoint(c) ? "" : sub(a.second, c.first)};
+        if (r.second.empty())
+          r.second = r.first;
+        return true;
+      case BO_Mul: {
+        if (isPoint(c) && !isPoint(a))
+          std::swap(a, c);              // a: the single value (if either is one)
+        if (isPoint(a) && isPoint(c)) {
+          r = {mul(a.first, c.first), ""};
+          r.second = r.first;
+          return true;
+        }
+        long long k;
+        if (isPoint(a) && asInt(a.first, k)) { // a known constant: its sign orders the ends
+          r = k >= 0 ? Interval{mul(a.first, c.first), mul(a.first, c.second)}
+                     : Interval{mul(a.first, c.second), mul(a.first, c.first)};
+          return true;
+        }
+        if (isPoint(a)) {               // a run-time value of unknown sign
+          std::string p = mul(a.first, c.first), q = mul(a.first, c.second);
+          r = {"cuad_imin(" + p + ", " + q + ")", "cuad_imax(" + p + ", " + q + ")"};
+          return true;
+        }
+        // two intervals: the four corner products bound the product
+        std::string p[4] = {mul(a.first, c.first), mul(a.first, c.second), mul(a.second, c.first),
+                            mul(a.second, c.second)};
+        r = {"cuad_imin(cuad_imin(" + p[0] + ", " + p[1] + "), cuad_imin(" + p[2] + ", " + p[3] + "))",
+             "cuad_imax(cuad_imax(" + p[0] + ", " + p[1] + "), cuad_imax(" + p[2] + ", " + p[3] + "))"};
+        return true;
+      }
+      default:
+        return false;
+      }
+    }
+    return false;
+  }
+  // the write intervals of vd in L's body, or false when the whole array must be saved
+  bool writeIntervals(const ForStmt *L, const VarDecl *vd, std::vector<Interval> &out) const {
+    if (!Ctx.getAsConstantArrayType(vd->getType()) ||
+        Ctx.getAsConstantArrayType(Ctx.getAsConstantArrayType(vd->getType())->getElementType()))
+      return false;                     // multi-dimensional: whole array
+    std::map<const VarDecl *, ArrayUse> u;
+    std::vector<const VarDecl *> order;
+    arrayUses(L->getBody(), u, order);
+    if (u[vd].escapes)
+      return false;
+    bool ok = true;
+    std::set<std::string> seen;
+    std::function<void(const Stmt *)> walk = [&](const Stmt *s) {
+      if (!s || !ok)
+        return;
+      const Expr *target = nullptr;
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp())
+          target = bo->getLHS();
+      if (const auto *uo = dyn_cast<UnaryOperator>(s))
+        if (uo->isIncrementDecrementOp())
+          target = uo->getSubExpr();
+      if (target)
+        if (const auto *as = dyn_cast<ArraySubscriptExpr>(target->IgnoreParenImpCasts()))
+          if (const auto *d = dyn_cast<DeclRefExpr>(as->getBase()->IgnoreParenImpCasts()))
+            if (d->getDecl() == vd) {
+              Interval r;
+              if (!rangeOf(as->getIdx(), L, r)) {
+                ok = false;
+                return;
+              }
+              if (seen.insert(r.first + "|" + r.second).second)
+                out.push_back(r);
+            }
+      for (const Stmt *c : s->children())
+        walk(c);
+    };
+    walk(L->getBody());
+    return ok;
+  }
+  // Code visiting the elements of a set of index intervals of an N-element array, each clamped to [0, N).
+  // Several intervals of one array may overlap (the write sites of an LSTM layer loop): when, at run time,
+  // their lengths add up to more than their hull, the hull is visited once instead. The choice depends
+  // only on the interval bounds, so a push and its pop make the same one. `reverse` visits the intervals
+  // last-first (for pops; `emit` reverses the elements of one interval itself).
+  std::string regionCode(std::vector<Interval> iv, long long N, const std::string &ind, bool reverse,
+                         const std::function<std::string(const std::string &, const std::string &,
+                                                         const std::string &)> &emit) const {
+    for (Interval &r : iv) {
+      long long a, b;
+      r.first = asInt(r.first, a) ? std::to_string(std::max(a, 0LL)) : "cuad_imax(" + r.first + ", 0)";
+      r.second = asInt(r.second, b) ? std::to_string(std::min(b, N - 1))
+                                    : "cuad_imin(" + r.second + ", " + std::to_string(N - 1) + ")";
+    }
+    auto separate = [&](const std::string &in) {
+      std::string s;
+      if (reverse)
+        for (auto it = iv.rbegin(); it != iv.rend(); ++it)
+          s += emit(in, it->first, it->second);
+      else
+        for (const Interval &r : iv)
+          s += emit(in, r.first, r.second);
+      return s;
+    };
+    if (iv.size() == 1)
+      return separate(ind);
+    std::string lo = iv[0].first, hi = iv[0].second, sum;
+    for (size_t j = 1; j < iv.size(); ++j) {
+      lo = "cuad_imin(" + lo + ", " + iv[j].first + ")";
+      hi = "cuad_imax(" + hi + ", " + iv[j].second + ")";
+    }
+    for (size_t j = 0; j < iv.size(); ++j)
+      sum += (j ? " + " : "") + std::string("cuad_imax((") + iv[j].second + ") - (" + iv[j].first + ") + 1, 0)";
+    return ind + "if (" + sum + " > (" + hi + ") - (" + lo + ") + 1) {\n" + emit(ind + "  ", lo, hi) + ind +
+           "} else {\n" + separate(ind + "  ") + ind + "}\n";
+  }
   std::string flatElem(const VarDecl *vd, const std::string &k) const {
     QualType elem;
     arrayCount(vd, elem);
@@ -1391,6 +1702,18 @@ private:
     for (const VarDecl *vd : v) {
       QualType elem;
       std::string n = std::to_string(arrayCount(vd, elem));
+      std::vector<Interval> iv;
+      if (writeIntervals(fs, vd, iv)) { // only the elements this iteration may write (clamped to the array)
+        std::string a = vd->getNameAsString();
+        out += regionCode(iv, std::stoll(n), ind, !push, [&](const std::string &in, const std::string &lo,
+                                                             const std::string &hi) {
+          return push ? in + "for (long long _cuad_k = " + lo + "; _cuad_k <= " + hi + "; ++_cuad_k) cuad_push(" +
+                            a + "[_cuad_k]);\n"
+                      : in + "for (long long _cuad_k = " + hi + "; _cuad_k >= " + lo + "; --_cuad_k) cuad_pop(" +
+                            a + "[_cuad_k]);\n";
+        });
+        continue;
+      }
       if (push)
         out += ind + "for (int _cuad_k = 0; _cuad_k < " + n + "; ++_cuad_k) cuad_push(" +
                flatElem(vd, "_cuad_k") + ");\n";
@@ -1417,6 +1740,20 @@ private:
       std::string N = std::to_string(arrayCount(vd, elem)), sv = shadowName(fs, vd);
       if (save)
         out += ind + tstr(elem.getUnqualifiedType()) + " " + sv + "[" + N + "];\n";
+      // only the region the whole loop can write (its bounds evaluated at loop entry, before and after)
+      std::vector<Interval> iv;
+      rangeWhole_ = true;
+      bool regional = writeIntervals(fs, vd, iv);
+      rangeWhole_ = false;
+      if (regional) {
+        std::string a = vd->getNameAsString();
+        out += regionCode(iv, std::stoll(N), ind, false, [&](const std::string &in, const std::string &lo,
+                                                            const std::string &hi) {
+          return in + "for (long long _cuad_k = " + lo + "; _cuad_k <= " + hi + "; ++_cuad_k) " +
+                 (save ? sv + "[_cuad_k] = " + a + "[_cuad_k]" : a + "[_cuad_k] = " + sv + "[_cuad_k]") + ";\n";
+        });
+        continue;
+      }
       out += ind + "for (int _cuad_k = 0; _cuad_k < " + N + "; ++_cuad_k) " +
              (save ? sv + "[_cuad_k] = " + flatElem(vd, "_cuad_k")
                    : flatElem(vd, "_cuad_k") + " = " + sv + "[_cuad_k]") + ";\n";

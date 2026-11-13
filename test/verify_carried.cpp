@@ -48,6 +48,9 @@ int main() {
   CHECK(private_update);
   CHECK(offset_private);
   CHECK(multidim_state);
+  CHECK(tri_region);
+  CHECK(neg_offset);
+  CHECK(sign_branch);
   std::printf("RESULT: %s\n", fails ? "FAILED" : "all passed");
   return fails ? 1 : 0;
 }

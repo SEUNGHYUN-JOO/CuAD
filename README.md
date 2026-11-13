@@ -114,9 +114,11 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   iteration in the reverse sweep. Scalars that such a loop carries from one iteration to the
   next are checkpointed at the top of every iteration; pure accumulations (`v = v + e`) are
   recognised and need no checkpoint. Local arrays that a loop both writes and reads (a
-  recurrent state, `a[i] = f(a[i-1])`, a read followed by an overwrite) are checkpointed whole
-  in the same way; a single snapshot at loop entry is used only when every access in the loop
-  uses one index that is provably injective in the induction variable.
+  recurrent state, `a[i] = f(a[i-1])`, a read followed by an overwrite) are checkpointed in the
+  same way. Only the elements an iteration may write are saved: an index interval per write
+  site, evaluated at run time from loop counters and unmodified variables (the whole array when
+  an index is not of that form). A single snapshot at loop entry is used only when every access
+  in the loop uses one index that is provably injective in the induction variable.
 - **Thread-local tape for overwritten values**: values that must be restored are pushed to a
   fixed-size per-thread array (`cuad_rt.h`, size `CUAD_TAPE_SIZE`, default 256), not to the
   device heap.
@@ -138,8 +140,8 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   (the property that `__restrict__` declares). Split an in-place update into a kernel that
   reads and a kernel that writes.
 - The per-thread tape has a compile-time size (`-DCUAD_TAPE_SIZE=...`). A loop that carries
-  non-accumulated scalars or local arrays stores them in every iteration (a carried array: its
-  full declared size), so its tape grows with the trip count. Overflow traps.
+  non-accumulated scalars or local arrays stores them in every iteration (a carried array: the
+  region the iteration may write), so its tape grows with the trip count. Overflow traps.
 - A `__global__` kernel's scalar parameters are uniform across the launch and are held
   passive (no adjoint argument). Make a quantity an array if its derivative is needed.
 - `if` conditions are re-evaluated in the reverse sweep, so a branch must not reassign a

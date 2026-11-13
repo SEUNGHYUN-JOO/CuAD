@@ -162,3 +162,48 @@ __device__ void multidim_state(const double *x, double *y, int n) {
   }
   y[0] = g[0][1] + g[1][0] + g[1][1];
 }
+
+// Write-region checkpoints: index ranges the analysis must bound from above.
+// A triangular inner range starting at the checkpointed loop's own counter.
+__device__ void tri_region(const double *x, double *y, int n) {
+  double a[8];
+  for (int i = 0; i < 8; ++i)
+    a[i] = 0.1 * (i + 1) * x[i % n];
+  for (int t = 0; t < 4; ++t) {
+    for (int j = t; j < 4; ++j)
+      a[j] = a[j] * x[t] + 0.3 * sin(a[7 - j]);
+    a[7 - t] = a[7 - t] + a[t] * x[t + 1];
+  }
+  y[0] = a[0] + a[2] * a[5] + a[7];
+}
+// A negative coefficient and a runtime offset held in a never-modified local.
+__device__ void neg_offset(const double *x, double *y, int n) {
+  double a[8];
+  for (int i = 0; i < 8; ++i)
+    a[i] = x[i % n];
+  int off = n - 4;
+  for (int t = 0; t < n; ++t) {
+    for (int j = 0; j < 4; ++j) {
+      double g = tanh(a[off + j] * x[t]);
+      a[7 - 2 * j] = a[7 - 2 * j] * 0.9 + g * x[j];
+    }
+  }
+  y[0] = a[1] + a[3] * a[5] + a[7] + a[6];
+}
+// A coefficient of run-time sign, and a write inside a branch.
+__device__ void sign_branch(const double *x, double *y, int n) {
+  double a[16];
+  for (int i = 0; i < 16; ++i)
+    a[i] = 0.2 * x[i % n];
+  int s = n > 5 ? 2 : -2;
+  int base = n > 5 ? 0 : 15;
+  for (int t = 0; t < n; ++t) {
+    for (int j = 0; j < 4; ++j) {
+      if (x[t] > 0.5)
+        a[base + s * j] = a[base + s * j] * x[t] + a[base + s * j + 1];
+      else
+        a[base + s * j + 1] = sin(a[base + s * j]) + x[t];
+    }
+  }
+  y[0] = a[0] + a[1] + a[2] * a[4] + a[6] + a[7];
+}
