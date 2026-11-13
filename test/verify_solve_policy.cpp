@@ -56,6 +56,14 @@ int main() {
   bool ok = std::fabs(xb[0] - 2.0) < 1e-12; // t* = 2a
   std::printf("  %-22s converged: dt*/da = %.15f (exact 2)  [%s]\n", "contraction_converged", xb[0], ok ? "PASS" : "FAIL");
   fails += !ok;
+  {
+    double xo[1] = {2.0}, xob[1] = {0}, yo = 0, yob = 1;
+    bisect_outside_b(xo, xob, &yo, &yob, 1);
+    bool ok2 = std::fabs(xob[0] - 0.1) < 1e-12; // y = hi0 = 0.5 + 0.1 a
+    std::printf("  %-22s root outside the bracket: dy/da = %.15f (the bound's, exact 0.1)  [%s]\n", "bisect_outside",
+                xob[0], ok2 ? "PASS" : "FAIL");
+    fails += !ok2;
+  }
   std::printf("RESULT: %s\n", fails ? "FAILED" : "all passed");
   return fails ? 1 : 0;
 }

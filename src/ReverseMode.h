@@ -1746,7 +1746,40 @@ private:
     out += shadowAdj(locals, i1);
     out += i1 + Tm + " _cuad_r" + id + ";\n" + i1 + "{\n" + shadowAdj(si.params, i2) + residualReverse("1", i2, depth + 2) +
            i2 + "_cuad_r" + id + " = " + m + "_b;\n" + i1 + "}\n";
-    out += residualReverse("-(_cuad_s" + id + ") / (_cuad_r" + id + ")", i1, depth + 1);
+    // A collapsed bracket is a root only if the residual vanishes there. If the root lies outside the initial bracket
+    // (a bound then acts as a floor or a ceiling), the moving bounds close onto the one that never moved, and the
+    // result is that bound: its derivative is the derivative of the program. The branch taken at the collapsed point
+    // names the bounds that kept moving; the others receive the seed and pass it to their initial values.
+    out += i1 + "if (fabs((double)((" + prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) +
+           "))) <= CUAD_SOLVE_TOL * fabs((double)(_cuad_r" + id + " * " + m + "))) {\n";
+    out += residualReverse("-(_cuad_s" + id + ") / (_cuad_r" + id + ")", i2, depth + 2);
+    std::set<const VarDecl *> thenSet, elseSet;
+    for (int armI = 0; armI < 2; ++armI) {
+      const Stmt *arm = armI == 0 ? si.sel->getThen() : si.sel->getElse();
+      std::vector<const Stmt *> as;
+      if (const auto *cs = dyn_cast<CompoundStmt>(arm))
+        as.assign(cs->body_begin(), cs->body_end());
+      else
+        as.push_back(arm);
+      for (const Stmt *a : as)
+        if (const auto *bo = dyn_cast<BinaryOperator>(a))
+          if (const auto *l = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+            if (const auto *lv = dyn_cast<VarDecl>(l->getDecl()))
+              (armI == 0 ? thenSet : elseSet).insert(lv);
+    }
+    auto pinned = [&](const std::set<const VarDecl *> &moving) {
+      std::vector<const VarDecl *> fixed;
+      for (const VarDecl *v : si.state)
+        if (!moving.count(v))
+          fixed.push_back(v);
+      std::string o;
+      for (const VarDecl *v : fixed)
+        o += i3 + v->getNameAsString() + "_b = (_cuad_s" + id + ") / " + std::to_string(fixed.size()) + ".0;\n";
+      return o;
+    };
+    out += i1 + "} else { // the root is outside the bracket: the result is the bound that never moved\n";
+    out += i2 + "if (" + prim(si.sel->getCond()) + ") {\n" + pinned(thenSet) + i2 + "} else {\n" + pinned(elseSet) +
+           i2 + "}\n" + i1 + "}\n";
     out += ind + "}\n";
     noPush_ = saved;
     return out;

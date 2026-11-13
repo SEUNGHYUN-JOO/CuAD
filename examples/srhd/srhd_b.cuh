@@ -306,31 +306,39 @@ __global__ void c2p_bisect_b(const double * U, double *U_b, double * P, double *
         m_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
         _cuad_r3 = m_b;
       }
-      m_b = 0;
-      v_b = 0;
-      W_b = 0;
-      eps_b = 0;
-      f_b = 0;
-      f_b += -(_cuad_s3) / (_cuad_r3);
-      g_b += ((f_b)*(eps))*((D / W));
-      D_b += (((g - 1.0))*((f_b)*(eps)))/(W);
-      W_b += -((((g - 1.0))*((f_b)*(eps)))*(D))/((W)*(W));
-      eps_b += ((g - 1.0) * (D / W))*(f_b);
-      m_b += -(f_b);
-      tau_b += (eps_b)/((D * W));
-      D_b += ((eps_b)/((D * W)))*((1.0 - W));
-      W_b += -((D)*((eps_b)/((D * W))));
-      m_b += ((eps_b)/((D * W)))*((1.0 - W * W));
-      W_b += (-((m)*((eps_b)/((D * W)))))*(W);
-      W_b += (W)*(-((m)*((eps_b)/((D * W)))));
-      D_b += (-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))))*(W);
-      W_b += (D)*(-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))));
-      v_b += (-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))))*(v);
-      v_b += (v)*(-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))));
-      S_b += (v_b)/((tau + D + m));
-      tau_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
-      D_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
-      m_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+      if (fabs((double)((f) - (0))) <= CUAD_SOLVE_TOL * fabs((double)(_cuad_r3 * m))) {
+        m_b = 0;
+        v_b = 0;
+        W_b = 0;
+        eps_b = 0;
+        f_b = 0;
+        f_b += -(_cuad_s3) / (_cuad_r3);
+        g_b += ((f_b)*(eps))*((D / W));
+        D_b += (((g - 1.0))*((f_b)*(eps)))/(W);
+        W_b += -((((g - 1.0))*((f_b)*(eps)))*(D))/((W)*(W));
+        eps_b += ((g - 1.0) * (D / W))*(f_b);
+        m_b += -(f_b);
+        tau_b += (eps_b)/((D * W));
+        D_b += ((eps_b)/((D * W)))*((1.0 - W));
+        W_b += -((D)*((eps_b)/((D * W))));
+        m_b += ((eps_b)/((D * W)))*((1.0 - W * W));
+        W_b += (-((m)*((eps_b)/((D * W)))))*(W);
+        W_b += (W)*(-((m)*((eps_b)/((D * W)))));
+        D_b += (-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))))*(W);
+        W_b += (D)*(-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))));
+        v_b += (-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))))*(v);
+        v_b += (v)*(-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))));
+        S_b += (v_b)/((tau + D + m));
+        tau_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+        D_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+        m_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+      } else { // the root is outside the bracket: the result is the bound that never moved
+        if (f > 0) {
+          hi_b = (_cuad_s3) / 1.0;
+        } else {
+          lo_b = (_cuad_s3) / 1.0;
+        }
+      }
     }
     g_b += (2.0)*((((2.0 * (g - 1.0) * tau) >= (2.0 * lo) ? (hi_b) : 0))*(tau));
     tau_b += (2.0 * (g - 1.0))*(((2.0 * (g - 1.0) * tau) >= (2.0 * lo) ? (hi_b) : 0));

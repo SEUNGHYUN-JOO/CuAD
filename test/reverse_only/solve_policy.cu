@@ -1,6 +1,7 @@
 // Loops of the convergence-loop form (`for` + `if (c) break;`, floating locals iterated) that do NOT stop at a fixed
 // point. Reverse mode recognises their form statically, so the implicit adjoint must refuse them at run time: one more
-// iteration from the exit state moves it (test/verify_solve_policy.cpp expects a trap from each `_b`).
+// iteration from the exit state moves it (test/verify_solve_policy.cpp expects a trap from each `_b`). Also a bisection
+// whose root lies outside its bracket: it converges to a bound, and the adjoint must be that bound's derivative.
 // x = (a, ...), y[0] = result.
 
 // A threshold exit: t -> 0.5 t + a is a contraction (fixed point 2a), but the loop leaves at t > 1.5 a.
@@ -43,6 +44,20 @@ __device__ void bisect_capped(const double *x, double *y, int n) {
   double a = x[0];
   double lo = 0.0, hi = 4.0;
   for (int it = 0; it < 5; ++it) {
+    double m = 0.5 * (lo + hi);
+    if (m * m - a > 0) hi = m;
+    else lo = m;
+    if (hi - lo <= 1e-15 * hi) break;
+  }
+  y[0] = 0.5 * (lo + hi);
+}
+
+// A bisection whose bracket does not contain the root (sqrt(a) > hi0 = 0.5 + 0.1 a for a = 2): the bounds meet at
+// the upper bound, which never moved, so y = 0.5 + 0.1 a and dy/da = 0.1 (not the root's 1/(2 sqrt(a))).
+__device__ void bisect_outside(const double *x, double *y, int n) {
+  double a = x[0];
+  double lo = 0.0, hi = 0.5 + 0.1 * a;
+  for (int it = 0; it < 200; ++it) {
     double m = 0.5 * (lo + hi);
     if (m * m - a > 0) hi = m;
     else lo = m;

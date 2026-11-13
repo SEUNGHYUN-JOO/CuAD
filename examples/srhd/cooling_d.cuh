@@ -19,8 +19,12 @@ __global__ void cool_implicit_d(const double * P, const double * P_d, double * P
     double al = lam[1];
     double c_d = (((dt_d)*(L0) + (dt)*(L0_d))*(rho) + (dt * L0)*(rho_d))*(rho) + (dt * L0 * rho)*(rho_d);
     double c = dt * L0 * rho * rho;
-    double floor_d = (1e-6)*(p_d);
-    double floor = 1e-6 * p;
+    double floor_d = (1e-6)*(rho_d);
+    double floor = 1e-6 * rho;
+    if (floor > p) {
+      floor_d = p_d;
+      floor = p;
+    }
     double x_d = p_d;
     double x = p;
     for (int it = 0; it < 60; ++it) {

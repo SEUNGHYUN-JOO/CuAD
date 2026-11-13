@@ -12,7 +12,11 @@ __global__ void cool_implicit_b(const double * P, double *P_b, double * Pn, doub
     double rho = P[i], u = P[n + i], p = P[2 * n + i];
     double L0 = lam[0], al = lam[1];
     double c = dt * L0 * rho * rho;
-    double floor = 1e-6 * p;
+    double floor = 1e-6 * rho;
+    if (floor > p) {
+      cuad_push(floor);
+      floor = p;
+    }
     double x = p;
     for (int it = 0; it < 60; ++it) {
       double q = pow(x / rho, al);
@@ -42,7 +46,7 @@ __global__ void cool_implicit_b(const double * P, double *P_b, double * Pn, doub
     double _cuad_b2 = Pn_b[i];
     Pn_b[i] = 0;
     rho_b += _cuad_b2;
-    { // cuad: implicit adjoint of the convergence loop at line 13: l = s + G_x^T l over one iteration, then the inputs get G_p^T l
+    { // cuad: implicit adjoint of the convergence loop at line 15: l = s + G_x^T l over one iteration, then the inputs get G_p^T l
       double _cuad_s3_x = x_b, _cuad_l3_x = x_b;
       x_b = 0;
       { // cuad: the loop must have stopped at a fixed point of one iteration
@@ -138,7 +142,13 @@ __global__ void cool_implicit_b(const double * P, double *P_b, double * Pn, doub
       }
     }
     p_b += x_b;
-    p_b += (1e-6)*(floor_b);
+    if (floor > p) {
+      cuad_pop(floor);
+      double _cuad_b6 = floor_b;
+      floor_b = 0;
+      p_b += _cuad_b6;
+    }
+    rho_b += (1e-6)*(floor_b);
     dt_b += (((c_b)*(rho))*(rho))*(L0);
     L0_b += (dt)*(((c_b)*(rho))*(rho));
     rho_b += (dt * L0)*((c_b)*(rho));
