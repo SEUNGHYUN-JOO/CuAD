@@ -113,7 +113,10 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
 - **Recompute rather than store**: loops that declare locals are recomputed iteration by
   iteration in the reverse sweep. Scalars that such a loop carries from one iteration to the
   next are checkpointed at the top of every iteration; pure accumulations (`v = v + e`) are
-  recognised and need no checkpoint.
+  recognised and need no checkpoint. Local arrays that a loop both writes and reads (a
+  recurrent state, `a[i] = f(a[i-1])`, a read followed by an overwrite) are checkpointed whole
+  in the same way; a single snapshot at loop entry is used only when every access in the loop
+  uses one index that is provably injective in the induction variable.
 - **Thread-local tape for overwritten values**: values that must be restored are pushed to a
   fixed-size per-thread array (`cuad_rt.h`, size `CUAD_TAPE_SIZE`, default 256), not to the
   device heap.
@@ -135,12 +138,15 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   (the property that `__restrict__` declares). Split an in-place update into a kernel that
   reads and a kernel that writes.
 - The per-thread tape has a compile-time size (`-DCUAD_TAPE_SIZE=...`). A loop that carries
-  non-accumulated scalars stores them in every iteration, so its tape grows with the trip count.
+  non-accumulated scalars or local arrays stores them in every iteration (a carried array: its
+  full declared size), so its tape grows with the trip count. Overflow traps.
 - A `__global__` kernel's scalar parameters are uniform across the launch and are held
   passive (no adjoint argument). Make a quantity an array if its derivative is needed.
 - `if` conditions are re-evaluated in the reverse sweep, so a branch must not reassign a
   variable that its own condition reads.
-- In-place updates of array elements inside loops must be per-element per iteration.
+- Local arrays are analysed by name. Inside a loop, an array passed whole (to a call, to a
+  pointer) is treated as written and read; writes made later through a pointer that was taken
+  outside the loop are not seen, so do not alias a local array with a local pointer.
 - Integer locals are not taped: give a reassigned integer local a new variable for each
   value it takes.
 - Not supported in reverse mode: `while`, `do` and `switch` statements and `for` loops

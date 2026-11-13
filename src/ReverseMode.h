@@ -16,7 +16,7 @@
 //   - = , += , -= , *= , /=  (overwrites handled by the tape);
 //   - cross-call adjoints: a call to another differentiable function becomes a
 //     call to its _b companion.
-// Tape: a per-thread LIFO stack (cuad_push / cuad_pop, see test/cuad_tape.h).
+// Tape: a per-thread LIFO stack (cuad_push / cuad_pop, see test/cuad_rt.h).
 // Still TODO: struct/member fields, atomics, non-canonical loop reversal
 // (kept in forward order with a warning), and calls whose active arguments are
 // not simple lvalues.
@@ -52,6 +52,7 @@ class ReverseMode {
   std::set<const VarDecl *> taped_;  // scalar locals overwritten -> push/pop
   std::set<const VarDecl *> accum_;  // pure accumulators: overwritten, but no tape needed
   std::set<const VarDecl *> reused_; // local arrays written by >1 call -> tape
+  std::set<const VarDecl *> arrayTaped_; // local arrays with self-dependent element writes
   std::string curRetSeed_;           // return-adjoint seed param (value-ret fns)
   mutable int tmp_ = 0;              // fresh snapshot-variable counter
   mutable bool noPush_ = false;      // emitting a push-free primal (a recompute loop's forward pass)
@@ -104,10 +105,14 @@ public:
     Act.run(FD);
     taped_.clear();
     reused_.clear();
+    arrayTaped_.clear();
     hoisted_.clear();
     tmp_ = 0;
     collectTaped(FD->getBody());
     collectAccum(FD->getBody());
+    // every element write of a local floating array is taped (its old value may be read by an adjoint
+    // statement after the reverse sweep has passed the write; before, only self-referencing writes were)
+    writtenFloatArrays(FD->getBody(), arrayTaped_);
     { // local arrays written as active output args by >1 differentiable call
       std::map<const VarDecl *, int> cnt;
       collectReused(FD->getBody(), cnt);
@@ -179,7 +184,8 @@ public:
     }
     out += ")\n{\n";
     out += localScalarAdj;
-    if (!taped_.empty() || !reused_.empty()) // per-thread private tape
+    if (!taped_.empty() || !reused_.empty() || !arrayTaped_.empty() ||
+        anyCheckpointedArray(FD->getBody())) // per-thread private tape
       out += "  double _cuad_tape[CUAD_TAPE_SIZE]; int _cuad_tp = 0;\n";
     if (const auto *body = dyn_cast_or_null<CompoundStmt>(FD->getBody())) {
       std::vector<const Stmt *> stmts(body->body_begin(), body->body_end());
@@ -534,6 +540,20 @@ private:
     return nullptr;
   }
 
+  const ArraySubscriptExpr *tapedArrayTarget(const Stmt *s) const {
+    const auto *bo = dyn_cast<BinaryOperator>(s);
+    if (!bo || !bo->isAssignmentOp())
+      return nullptr;
+    const auto *as = dyn_cast<ArraySubscriptExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    if (!as)
+      return nullptr;
+    const auto *d = dyn_cast<DeclRefExpr>(subscriptRoot(as)); // a[i] and g[m][0] alike
+    if (!d)
+      return nullptr;
+    const auto *vd = dyn_cast<VarDecl>(d->getDecl());
+    return vd && arrayTaped_.count(vd) ? as : nullptr;
+  }
+
   // ---- reused output arrays (e.g. faceI(...,S,C) called for several faces) ----
   void collectReused(const Stmt *s, std::map<const VarDecl *, int> &cnt) const {
     if (!s)
@@ -743,8 +763,11 @@ private:
     // values, as an if statement's is); previously dropped silently
     if (const auto *co = dyn_cast<ConditionalOperator>(e)) {
       std::string c = prim(co->getCond());
-      pushAdj(co->getTrueExpr(), "((" + c + ") ? (" + seed + ") : 0)", out, ind);
-      pushAdj(co->getFalseExpr(), "((" + c + ") ? 0 : (" + seed + "))", out, ind);
+      out += ind + "if (" + c + ") {\n";
+      pushAdj(co->getTrueExpr(), seed, out, ind + "  ");
+      out += ind + "} else {\n";
+      pushAdj(co->getFalseExpr(), seed, out, ind + "  ");
+      out += ind + "}\n";
       return;
     }
     if (const auto *call = dyn_cast<CallExpr>(e))
@@ -1068,10 +1091,49 @@ private:
     }
     out.push_back(s);
   }
-  // the local 1-D float arrays a loop updates in place (`ql[m] += f(ql[m])`, `a[i] = a[i] * c`): a recompute loop's
-  // reverse would otherwise re-run each iteration from the arrays' FINAL values. They are saved before the loop
-  // (forward) and restored before and after its reverse - valid when an iteration updates only its own elements.
-  void selfUpdated(const Stmt *s, std::set<const VarDecl *> &out) const {
+  // ---------------- local arrays carried across loop iterations ----------------
+  //
+  // A loop's reverse must see, for every iteration it reverses, the values the iteration read in the forward sweep.
+  // For a local array declared outside the loop and both written and read inside it, that is the array as it was
+  // at the top of the iteration - which a later iteration may have overwritten (a recurrent state, `a[i] = a[i-1]`,
+  // a read followed by an overwrite of the same element). Such an array is CHECKPOINTED: pushed whole at the top
+  // of every forward iteration and popped before the backward loop re-runs that iteration (the loop is reversed as
+  // a recompute loop). The one case where a single snapshot taken at loop entry suffices is proven, not assumed:
+  // every access to the array in the loop uses one and the same index, injective in the induction variable, so
+  // each iteration touches only its own element (`a[i] = f(a[i])`, `q[3*i+off] *= c`).
+  static const VarDecl *localFloatArray(const Expr *base, ASTContext &C) {
+    const auto *d = dyn_cast<DeclRefExpr>(base->IgnoreParenImpCasts());
+    if (!d)
+      return nullptr;
+    const auto *vd = dyn_cast<VarDecl>(d->getDecl());
+    if (!vd || !vd->isLocalVarDecl() || isa<ParmVarDecl>(vd))
+      return nullptr;
+    const auto *cat = C.getAsConstantArrayType(vd->getType());
+    if (!cat)
+      return nullptr;
+    QualType el = cat->getElementType();
+    while (const auto *in = C.getAsConstantArrayType(el))
+      el = in->getElementType();
+    return el->isRealFloatingType() ? vd : nullptr;
+  }
+  // the array an lvalue `a[i]` / `g[m][0]` writes into
+  static const Expr *subscriptRoot(const Expr *e) {
+    e = e->IgnoreParenImpCasts();
+    while (const auto *as = dyn_cast<ArraySubscriptExpr>(e))
+      e = as->getBase()->IgnoreParenImpCasts();
+    return e;
+  }
+  void referencedLocalArrays(const Stmt *s, std::set<const VarDecl *> &out) const {
+    if (!s)
+      return;
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+        if (vd->isLocalVarDecl() && Ctx.getAsConstantArrayType(vd->getType()))
+          out.insert(vd);
+    for (const Stmt *c : s->children())
+      referencedLocalArrays(c, out);
+  }
+  void writtenLocalArrays(const Stmt *s, std::set<const VarDecl *> &out) const {
     if (!s)
       return;
     if (const auto *bo = dyn_cast<BinaryOperator>(s))
@@ -1079,33 +1141,285 @@ private:
         if (const auto *as = dyn_cast<ArraySubscriptExpr>(bo->getLHS()->IgnoreParenImpCasts()))
           if (const auto *d = dyn_cast<DeclRefExpr>(as->getBase()->IgnoreParenImpCasts()))
             if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
-              if (vd->isLocalVarDecl() && !isa<ParmVarDecl>(vd))
-                if (const auto *cat = Ctx.getAsConstantArrayType(vd->getType()))
-                  if (cat->getElementType()->isRealFloatingType() &&
-                      (bo->getOpcode() != BO_Assign || refersToVar(bo->getRHS(), vd)))
-                    out.insert(vd);
+              if (vd->isLocalVarDecl() && Ctx.getAsConstantArrayType(vd->getType()))
+                out.insert(vd);
     for (const Stmt *c : s->children())
-      selfUpdated(c, out);
+      writtenLocalArrays(c, out);
+  }
+  // local floating arrays whose elements are assigned in s (the per-element tape handles exactly these)
+  void writtenFloatArrays(const Stmt *s, std::set<const VarDecl *> &out) const {
+    if (!s)
+      return;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        if (const auto *as = dyn_cast<ArraySubscriptExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+          if (const VarDecl *vd = localFloatArray(subscriptRoot(as), Ctx))
+            out.insert(vd);
+    for (const Stmt *c : s->children())
+      writtenFloatArrays(c, out);
+  }
+  // Classify every reference to a local floating array inside s: written (assigned element, ++/--, or the array
+  // passed whole - to a call, through a pointer - which may write it), read (any other use), and the subscripts
+  // under which it is accessed. A whole-array use is recorded as an "escape".
+  struct ArrayUse {
+    bool written = false, read = false, escapes = false;
+    std::vector<const Expr *> idx;
+  };
+  void arrayUses(const Stmt *s, std::map<const VarDecl *, ArrayUse> &u, std::vector<const VarDecl *> &order,
+                 const Expr *writeTarget = nullptr) const {
+    if (!s)
+      return;
+    auto touch = [&](const VarDecl *vd) -> ArrayUse & {
+      if (!u.count(vd))
+        order.push_back(vd);
+      return u[vd];
+    };
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp()) {
+        const Expr *lhs = bo->getLHS()->IgnoreParenImpCasts();
+        if (isa<ArraySubscriptExpr>(lhs)) {
+          if (const VarDecl *vd = localFloatArray(subscriptRoot(lhs), Ctx)) {
+            ArrayUse &a = touch(vd);
+            a.written = true;
+            if (bo->getOpcode() != BO_Assign)
+              a.read = true;          // compound assignment reads the old element
+          }
+          arrayUses(lhs, u, order, lhs);
+          arrayUses(bo->getRHS(), u, order);
+          return;
+        }
+      }
+    if (const auto *uo = dyn_cast<UnaryOperator>(s))
+      if (uo->isIncrementDecrementOp())
+        if (const VarDecl *vd = localFloatArray(subscriptRoot(uo->getSubExpr()), Ctx)) {
+          ArrayUse &a = touch(vd);
+          a.written = a.read = true;
+        }
+    if (const auto *as = dyn_cast<ArraySubscriptExpr>(s)) {
+      const Expr *base = as->getBase()->IgnoreParenImpCasts();
+      if (const VarDecl *vd = localFloatArray(base, Ctx)) {
+        ArrayUse &a = touch(vd);
+        if (s != writeTarget)
+          a.read = true;
+        a.idx.push_back(as->getIdx());
+        arrayUses(as->getIdx(), u, order);
+        return;
+      }
+      if (isa<ArraySubscriptExpr>(base)) { // g[m][0]: multi-dimensional - analysed as one opaque array
+        if (const VarDecl *vd = localFloatArray(subscriptRoot(base), Ctx)) {
+          ArrayUse &a = touch(vd);
+          if (s != writeTarget)
+            a.read = true;
+          a.escapes = true;
+        }
+        arrayUses(as->getIdx(), u, order);
+        arrayUses(base, u, order, nullptr);
+        return;
+      }
+    }
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (const VarDecl *vd = localFloatArray(d, Ctx)) { // the whole array (decayed to a pointer)
+        ArrayUse &a = touch(vd);
+        a.written = a.read = a.escapes = true;
+        return;
+      }
+    for (const Stmt *c : s->children())
+      arrayUses(c, u, order, nullptr);
+  }
+  // v is assigned (=, op=, ++/--) or declared somewhere in s
+  static bool modifiedIn(const Stmt *s, const VarDecl *v) {
+    if (!s)
+      return false;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        if (const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+          if (d->getDecl() == v)
+            return true;
+    if (const auto *uo = dyn_cast<UnaryOperator>(s))
+      if (uo->isIncrementDecrementOp() || uo->getOpcode() == UO_AddrOf)
+        if (const auto *d = dyn_cast<DeclRefExpr>(uo->getSubExpr()->IgnoreParenImpCasts()))
+          if (d->getDecl() == v)
+            return true;
+    if (const auto *ds = dyn_cast<DeclStmt>(s))
+      for (const Decl *dd : ds->decls())
+        if (dd == v)
+          return true;
+    for (const Stmt *c : s->children())
+      if (modifiedIn(c, v))
+        return true;
+    return false;
+  }
+  // an integer expression whose value is the same in every iteration of fs: constants and variables that the loop
+  // (body and increment) never modifies, combined by arithmetic - no calls, no memory reads
+  bool loopInvariantInt(const Expr *e, const ForStmt *fs, const VarDecl *ind) const {
+    e = e->IgnoreParenImpCasts();
+    if (!e->getType()->isIntegerType())
+      return false;
+    if (isa<IntegerLiteral>(e))
+      return true;
+    if (const auto *d = dyn_cast<DeclRefExpr>(e)) {
+      if (isa<EnumConstantDecl>(d->getDecl()))
+        return true;
+      const auto *v = dyn_cast<VarDecl>(d->getDecl());
+      return v && v != ind && !withinRange(fs->getSourceRange(), v->getLocation()) &&
+             !modifiedIn(fs->getBody(), v) && !modifiedIn(fs->getInc(), v);
+    }
+    if (const auto *u = dyn_cast<UnaryOperator>(e))
+      return (u->getOpcode() == UO_Minus || u->getOpcode() == UO_Plus) &&
+             loopInvariantInt(u->getSubExpr(), fs, ind);
+    if (const auto *b = dyn_cast<BinaryOperator>(e))
+      return (b->isAdditiveOp() || b->isMultiplicativeOp() || b->isShiftOp()) &&
+             loopInvariantInt(b->getLHS(), fs, ind) && loopInvariantInt(b->getRHS(), fs, ind);
+    if (const auto *p = dyn_cast<ParenExpr>(e))
+      return loopInvariantInt(p->getSubExpr(), fs, ind);
+    return false;
+  }
+  // idx = +-i, idx + inv, inv + idx, idx - inv, c * idx (c a nonzero constant): distinct iterations, distinct
+  // elements. A reference to i alone is not enough - i % 2, i / 2 and i * i can revisit an element.
+  bool injectiveArrayIndex(const Expr *idx, const VarDecl *ind, const ForStmt *fs) const {
+    if (!idx || !ind)
+      return false;
+    idx = idx->IgnoreParenImpCasts();
+    if (const auto *d = dyn_cast<DeclRefExpr>(idx))
+      return d->getDecl() == ind;
+    if (const auto *p = dyn_cast<ParenExpr>(idx))
+      return injectiveArrayIndex(p->getSubExpr(), ind, fs);
+    if (const auto *u = dyn_cast<UnaryOperator>(idx))
+      if (u->getOpcode() == UO_Plus || u->getOpcode() == UO_Minus)
+        return injectiveArrayIndex(u->getSubExpr(), ind, fs);
+    if (const auto *b = dyn_cast<BinaryOperator>(idx)) {
+      const Expr *l = b->getLHS(), *r = b->getRHS();
+      if (b->getOpcode() == BO_Add)
+        return (injectiveArrayIndex(l, ind, fs) && loopInvariantInt(r, fs, ind)) ||
+               (injectiveArrayIndex(r, ind, fs) && loopInvariantInt(l, fs, ind));
+      if (b->getOpcode() == BO_Sub)
+        return injectiveArrayIndex(l, ind, fs) && loopInvariantInt(r, fs, ind);
+      if (b->getOpcode() == BO_Mul) {
+        const Expr *factor = injectiveArrayIndex(l, ind, fs) ? r : injectiveArrayIndex(r, ind, fs) ? l : nullptr;
+        Expr::EvalResult v;
+        return factor && factor->EvaluateAsInt(v, Ctx) && !v.Val.getInt().isZero();
+      }
+    }
+    return false;
+  }
+  const VarDecl *inductionVar(const ForStmt *fs) const {
+    if (const auto *ds = dyn_cast_or_null<DeclStmt>(fs->getInit()))
+      if (ds->isSingleDecl())
+        if (const auto *vd = dyn_cast<VarDecl>(ds->getSingleDecl()))
+          if (vd->getType()->isIntegerType() && !modifiedIn(fs->getBody(), vd))
+            return vd;
+    return nullptr;
+  }
+  bool sameExpr(const Expr *a, const Expr *b) const {
+    llvm::FoldingSetNodeID ia, ib;
+    a->IgnoreParenImpCasts()->Profile(ia, Ctx, true);
+    b->IgnoreParenImpCasts()->Profile(ib, Ctx, true);
+    return ia == ib;
+  }
+  // each iteration touches only its own element of the array (see above)
+  bool iterationPrivate(const ForStmt *fs, const ArrayUse &a) const {
+    const VarDecl *ind = inductionVar(fs);
+    if (!ind || a.escapes || a.idx.empty())
+      return false;
+    for (const Expr *e : a.idx)
+      if (!sameExpr(e, a.idx.front()))
+        return false;
+    return injectiveArrayIndex(a.idx.front(), ind, fs);
+  }
+  // arrays fs must checkpoint per iteration (declared outside, written and read inside, not iteration-private),
+  // and arrays it writes that need only a snapshot at loop entry (the rest of those written inside); source order
+  void loopArrays(const ForStmt *fs, std::vector<const VarDecl *> &ckpt,
+                  std::vector<const VarDecl *> *entry = nullptr) const {
+    std::map<const VarDecl *, ArrayUse> u;
+    std::vector<const VarDecl *> order;
+    arrayUses(fs->getBody(), u, order);
+    for (const VarDecl *vd : order) {
+      const ArrayUse &a = u[vd];
+      if (!a.written || withinRange(fs->getSourceRange(), vd->getLocation()))
+        continue;                       // declared inside the loop: fresh every iteration
+      if (a.read && !iterationPrivate(fs, a))
+        ckpt.push_back(vd);
+      else if (entry)
+        entry->push_back(vd);
+    }
+  }
+  std::vector<const VarDecl *> checkpointedArrays(const ForStmt *fs) const {
+    std::vector<const VarDecl *> v;
+    loopArrays(fs, v);
+    return v;
+  }
+  bool anyCheckpointedArray(const Stmt *s) const {
+    if (!s)
+      return false;
+    if (const auto *fs = dyn_cast<ForStmt>(s))
+      if (!checkpointedArrays(fs).empty())
+        return true;
+    for (const Stmt *c : s->children())
+      if (anyCheckpointedArray(c))
+        return true;
+    return false;
+  }
+  // a loop whose backward sweep re-runs each iteration's primal before reversing it
+  bool isRecompute(const ForStmt *fs) const {
+    return loopHasActiveLocals(fs->getBody()) || !checkpointedArrays(fs).empty();
+  }
+  // the element count of a (possibly multi-dimensional) local array and an lvalue for its flat element k
+  uint64_t arrayCount(const VarDecl *vd, QualType &elem) const {
+    uint64_t n = 1;
+    QualType qt = vd->getType().getCanonicalType();
+    while (const auto *cat = Ctx.getAsConstantArrayType(qt)) {
+      n *= cat->getSize().getZExtValue();
+      qt = cat->getElementType();
+    }
+    elem = qt;
+    return n;
+  }
+  std::string flatElem(const VarDecl *vd, const std::string &k) const {
+    QualType elem;
+    arrayCount(vd, elem);
+    if (Ctx.getAsConstantArrayType(Ctx.getAsConstantArrayType(vd->getType())->getElementType()))
+      return "((" + tstr(elem.getUnqualifiedType()) + " *)" + vd->getNameAsString() + ")[" + k + "]";
+    return vd->getNameAsString() + "[" + k + "]";
+  }
+  // per-iteration checkpoint of fs's carried arrays (forward: push at the top of an iteration; backward: pop
+  // before re-running it, last array first, last element first)
+  std::string arrayCheckpoint(const ForStmt *fs, bool push, const std::string &ind) const {
+    std::vector<const VarDecl *> v = checkpointedArrays(fs);
+    std::string out;
+    if (!push)
+      std::reverse(v.begin(), v.end());
+    for (const VarDecl *vd : v) {
+      QualType elem;
+      std::string n = std::to_string(arrayCount(vd, elem));
+      if (push)
+        out += ind + "for (int _cuad_k = 0; _cuad_k < " + n + "; ++_cuad_k) cuad_push(" +
+               flatElem(vd, "_cuad_k") + ");\n";
+      else
+        out += ind + "for (int _cuad_k = " + n + " - 1; _cuad_k >= 0; --_cuad_k) cuad_pop(" +
+               flatElem(vd, "_cuad_k") + ");\n";
+    }
+    return out;
   }
   std::string shadowName(const ForStmt *fs, const VarDecl *vd) const {
     auto it = shadowId_.find(fs);
     int id = it == shadowId_.end() ? (shadowId_[fs] = (int)shadowId_.size()) : it->second;
     return vd->getNameAsString() + "_cuad_sv" + std::to_string(id);
   }
+  // a recompute loop's forward pass runs without pushes, so the arrays it writes but does not checkpoint are
+  // snapshotted at loop entry and restored before its reverse (each iteration then re-runs from its own elements'
+  // entry values) and after it (for the statements before the loop)
   std::string shadowCopy(const ForStmt *fs, bool save, const std::string &ind) const {
-    std::set<const VarDecl *> arrs;
-    selfUpdated(fs->getBody(), arrs);
+    std::vector<const VarDecl *> ckpt, arrs;
+    loopArrays(fs, ckpt, &arrs);
     std::string out;
     for (const VarDecl *vd : arrs) {
-      if (withinRange(fs->getSourceRange(), vd->getLocation()))
-        continue;                       // declared inside the loop: fresh every iteration, nothing to save
-      const auto *cat = Ctx.getAsConstantArrayType(vd->getType());
-      std::string N = std::to_string(cat->getSize().getZExtValue()), a = vd->getNameAsString(),
-                  sv = shadowName(fs, vd);
+      QualType elem;
+      std::string N = std::to_string(arrayCount(vd, elem)), sv = shadowName(fs, vd);
       if (save)
-        out += ind + tstr(cat->getElementType().getUnqualifiedType()) + " " + sv + "[" + N + "];\n";
+        out += ind + tstr(elem.getUnqualifiedType()) + " " + sv + "[" + N + "];\n";
       out += ind + "for (int _cuad_k = 0; _cuad_k < " + N + "; ++_cuad_k) " +
-             (save ? sv + "[_cuad_k] = " + a : a + "[_cuad_k] = " + sv) + "[_cuad_k];\n";
+             (save ? sv + "[_cuad_k] = " + flatElem(vd, "_cuad_k")
+                   : flatElem(vd, "_cuad_k") + " = " + sv + "[_cuad_k]") + ";\n";
     }
     return out;
   }
@@ -1145,6 +1459,11 @@ private:
       return ind + "cuad_push(" + v->getNameAsString() + ");\n" +
              primalLine(s, ind);
     }
+    if (const ArraySubscriptExpr *as = tapedArrayTarget(s)) {
+      if (noPush_)
+        return primalLine(s, ind);
+      return ind + "cuad_push(" + prim(as) + ");\n" + primalLine(s, ind);
+    }
     // save reused output arrays before this call overwrites them
     if (const CallExpr *ce = asCall(s))
       if (!noPush_ && !reusedOutArgs(ce).empty())
@@ -1156,17 +1475,21 @@ private:
         init.pop_back();
       std::string cond = fs->getCond() ? prim(fs->getCond()) : "";
       std::string inc = fs->getInc() ? prim(fs->getInc()) : "";
-      std::string out = shadowCopy(fs, true, ind) + ind + "for (" + init + "; " + cond + "; " + inc + ") {\n";
-      if (loopHasActiveLocals(fs->getBody()) && (!noPush_ || fs == ckptLoop_))
+      const bool rec = isRecompute(fs);
+      std::string out = (rec ? shadowCopy(fs, true, ind) : "") + ind + "for (" + init + "; " + cond + "; " +
+                        inc + ") {\n";
+      if (rec && (!noPush_ || fs == ckptLoop_)) {
         for (const VarDecl *v : carriedVars(fs))
           out += ind + "  cuad_push(" + v->getNameAsString() + ");\n";
+        out += arrayCheckpoint(fs, true, ind + "  ");
+      }
       // a recompute loop re-materialises its primal, with its own pushes, inside the
       // backward loop - its forward pass must not push, NESTED ones included (genBlock only caught top-level ones).
       // Pushes left behind by a loop inside an `if` misaligned every pop of a value pushed before the loop: in
       // one kernel a running maximum popped an earlier loop's leftovers, and the
       // derivative went to the wrong element (invisible while nothing depended on that maximum).
       bool saved = noPush_;
-      if (loopHasActiveLocals(fs->getBody()))
+      if (rec)
         noPush_ = true;
       out += genPrimalBody(fs->getBody(), depth + 1);
       noPush_ = saved;
@@ -1326,7 +1649,7 @@ private:
       if (containsBreak(fs->getBody()) && hasActive(fs->getBody()))
         unsupported(fs->getBeginLoc(), "a loop that exits with `break` (its trip count is not known "
                                        "when the loop is reversed)");
-      bool recompute = loopHasActiveLocals(fs->getBody());
+      bool recompute = isRecompute(fs);
       std::string hdr;
       if (!reverseForHeader(fs, hdr)) {
         std::string init =
@@ -1342,7 +1665,7 @@ private:
                        "(correct only if the body is order-independent)\n";
         }
       }
-      std::string restore = shadowCopy(fs, false, ind);
+      std::string restore = recompute ? shadowCopy(fs, false, ind) : "";
       out = restore + out + ind + "for (" + hdr + ") {\n";
       if (recompute) {
         // per-iteration: recompute the body's primal, then reverse it (its
@@ -1353,6 +1676,7 @@ private:
         else if (fs->getBody())
           body.push_back(fs->getBody());
         std::vector<const VarDecl *> carried = carriedVars(fs);
+        out += arrayCheckpoint(fs, false, ind + "  ");
         for (auto it = carried.rbegin(); it != carried.rend(); ++it)
           out += ind + "  cuad_pop(" + (*it)->getNameAsString() + ");\n";
         out += genBlock(body, depth + 1);
@@ -1447,6 +1771,37 @@ private:
       return out;
     }
 
+    if (const ArraySubscriptExpr *as = tapedArrayTarget(bo)) {
+      std::string v = prim(as);
+      std::string snap = "_cuad_b" + std::to_string(tmp_++);
+      out += ind + "cuad_pop(" + v + ");\n";
+      out += ind + tstr(as->getType().getUnqualifiedType()) + " " + snap + " = " + loc + ";\n";
+      switch (bo->getOpcode()) {
+      case BO_Assign:
+        out += ind + loc + " = 0;\n";
+        pushAdj(bo->getRHS(), snap, out, ind);
+        break;
+      case BO_AddAssign:
+        pushAdj(bo->getRHS(), snap, out, ind);
+        break;
+      case BO_SubAssign:
+        pushAdj(bo->getRHS(), "-(" + snap + ")", out, ind);
+        break;
+      case BO_MulAssign:
+        out += ind + loc + " = " + mulT(prim(bo->getRHS()), snap) + ";\n";
+        pushAdj(bo->getRHS(), mulT(v, snap), out, ind);
+        break;
+      case BO_DivAssign:
+        out += ind + loc + " = (" + snap + ")/(" + prim(bo->getRHS()) + ");\n";
+        pushAdj(bo->getRHS(), "-(" + v + ")*(" + snap + ")/((" + prim(bo->getRHS()) + ")*(" + prim(bo->getRHS()) + "))", out, ind);
+        break;
+      default:
+        unsupported(bo->getBeginLoc(), "this compound local-array assignment");
+        break;
+      }
+      return out;
+    }
+
     // Non-taped target: an output write (y[i], *p). No stored old value needed. the seed is
     // SNAPSHOT before it is zeroed and propagated - an in-place update `B[i] = B[i] - acc` used to emit
     // `atomicAdd(&B_b[i], B_b[i]); acc_b += -(B_b[i]); B_b[i] = 0;` (seed doubled, then the pass-through lost).
@@ -1537,19 +1892,49 @@ private:
     }
     // branch-local declarations hoisted (their adjoints declared with them)
     out += hoistDecls(stmts, ind);
+    // A loop may read a local array whose elements are overwritten later in
+    // this block. Its backward replay must see the array as it was on entry.
+    std::map<const Stmt *, std::vector<std::pair<const VarDecl *, std::string>>> boundary;
+    for (size_t i = 0; i < stmts.size(); ++i) {
+      const Stmt *s = unwrapAttr(stmts[i]);
+      const auto *fs = dyn_cast<ForStmt>(s);
+      if (!fs)
+        continue;
+      std::set<const VarDecl *> refs, writes;
+      referencedLocalArrays(fs->getBody(), refs);
+      for (size_t j = i + 1; j < stmts.size(); ++j)
+        writtenLocalArrays(stmts[j], writes);
+      for (const VarDecl *vd : refs) {
+        if (!writes.count(vd) || !Act.isVaried(vd))
+          continue;
+        const auto *cat = Ctx.getAsConstantArrayType(vd->getType());
+        if (!cat || !cat->getElementType()->isRealFloatingType())
+          continue;
+        boundary[s].emplace_back(vd, vd->getNameAsString() + "_cuad_boundary" + std::to_string(tmp_++));
+      }
+    }
     for (const Stmt *s0 : stmts) { // forward primal (with pushes)
       const Stmt *s = unwrapAttr(s0);
+      for (const auto &entry : boundary[s]) {
+        const VarDecl *vd = entry.first;
+        const auto *cat = Ctx.getAsConstantArrayType(vd->getType());
+        std::string n = std::to_string(cat->getSize().getZExtValue());
+        out += ind + tstr(cat->getElementType()) + " " + entry.second + "[" + n + "];\n";
+        out += ind + "for (int _cuad_k = 0; _cuad_k < " + n + "; ++_cuad_k) " +
+               entry.second + "[_cuad_k] = " + vd->getNameAsString() + "[_cuad_k];\n";
+      }
       // recompute-loops regenerate their own primal (with pushes) inside the backward loop, per iteration.
       // They still run here, PUSH-FREE, so that what they leave behind (an accumulated sum) has its value when the
       // statements after them are recomputed - skipping them left an accumulated `v = sum M m` at 0, and every
       // derivative downstream of it was taken at the wrong state. Requirement on the
       // source: a recompute loop may change outer variables only by accumulation (x = x + ...).
       if (const auto *fs = dyn_cast<ForStmt>(s))
-        if (loopHasActiveLocals(fs->getBody())) {
+        if (isRecompute(fs)) {
           // a grid-stride loop's iterations are independent elements (nothing carried between them): no primal
           // pass needed - the backward loop re-materialises each one
           std::string init = fs->getInit() ? src(fs->getInit()->getSourceRange()) : "";
-          if (init.find("threadIdx") != std::string::npos && carriedVars(fs).empty())
+          if (init.find("threadIdx") != std::string::npos && carriedVars(fs).empty() &&
+              checkpointedArrays(fs).empty())
             continue;
           bool saved = noPush_;
           const ForStmt *savedLoop = ckptLoop_;
@@ -1593,8 +1978,16 @@ private:
       out += ind + "if (" + prim(exitIf->getCond()) + ") {\n" + genBlock(arm, depth + 1) + ind + "} else {\n" +
              genBlock(rest, depth + 1) + ind + "}\n";
     }
-    for (auto it = stmts.rbegin(); it != stmts.rend(); ++it) // reversed adjoint
+    for (auto it = stmts.rbegin(); it != stmts.rend(); ++it) { // reversed adjoint
+      const Stmt *s = unwrapAttr(*it);
+      for (const auto &entry : boundary[s]) {
+        const auto *cat = Ctx.getAsConstantArrayType(entry.first->getType());
+        std::string n = std::to_string(cat->getSize().getZExtValue());
+        out += ind + "for (int _cuad_k = 0; _cuad_k < " + n + "; ++_cuad_k) " +
+               entry.first->getNameAsString() + "[_cuad_k] = " + entry.second + "[_cuad_k];\n";
+      }
       out += reverseStmt(*it, depth);
+    }
     return out;
   }
 };

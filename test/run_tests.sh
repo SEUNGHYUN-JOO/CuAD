@@ -29,6 +29,16 @@ g++ -O2 -std=c++17 -Itest test/verify_reverse.cpp -o test/out/verify_reverse
 test/out/verify_reverse || fail=1
 
 echo
+echo "=== CONDITIONAL INDEX: inactive out-of-bounds branch under ASan ==="
+g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/verify_conditional_index.cpp -o test/out/verify_conditional_index
+test/out/verify_conditional_index || fail=1
+
+echo
+echo "=== TAPE BOUNDS: valid LIFO and fatal overflow/underflow ==="
+g++ -O2 -std=c++17 -Itest test/verify_tape_bounds.cpp -o test/out/verify_tape_bounds
+test/out/verify_tape_bounds || fail=1
+
+echo
 echo "=== NESTED VALUE-RETURNING CALLS + MATH RULES: tangent FD + adjoint vs tangent ==="
 g++ -O2 -std=c++17 -Itest test/verify_extra.cpp -o test/out/verify_extra
 test/out/verify_extra || fail=1
@@ -37,6 +47,11 @@ echo
 echo "=== LOOP-CARRIED SCALARS in recompute loops: adjoint vs FD ==="
 g++ -O2 -std=c++17 -Itest test/verify_loops.cpp -o test/out/verify_loops
 test/out/verify_loops || fail=1
+
+echo
+echo "=== LOOP-CARRIED LOCAL ARRAYS (recurrences, repeated indices, overwrites, LSTM, 2-D): adjoint vs FD, ASan ==="
+g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/verify_carried.cpp -o test/out/verify_carried
+test/out/verify_carried || fail=1
 
 echo
 echo "=== UNSUPPORTED CONSTRUCTS must be rejected with located errors (exit 3) ==="
