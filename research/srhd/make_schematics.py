@@ -50,11 +50,13 @@ def newton(av, K, t0=2.0):
 
 t = root(a); dt = -t / (3 * t * t + a)
 C, INK, MUTED = mf.C, mf.INK, mf.MUTED
-shade = ['#f4a6a7', '#e8585a', '#d62728']          # light to full red: more bisection steps
+# each K its own colour and line style (not only a shade): bisection in (a), Newton in (b)
+bis_style = [('#ff7f0e', ':'), ('#9467bd', '--'), ('#d62728', '-')]
+newton_style = [('#2ca02c', ':'), ('#8c564b', '--'), ('#e377c2', '-.')]
 fig, axs = mf.new(mf.TWO, 2.6, ncols=2)
 ax = axs[0]
-for K, col in zip((4, 6, 8), shade):
-    ax.plot(a, bisect(a, K), '-', color=col, lw=1.1, drawstyle='steps-mid', label=f'bisection after $K={K}$ steps')
+for K, (col, ls) in zip((4, 6, 8), bis_style):
+    ax.plot(a, bisect(a, K), ls, color=col, lw=1.2, drawstyle='steps-mid', label=f'bisection after $K={K}$ steps')
 ax.plot(a, t, '-', color=C['cuad'], lw=1.8, label=r'root $t^\ast(a)$', zorder=4)
 mf.title(ax, 'a', 'value')
 ax.set_xlabel('$a$'); ax.set_ylabel('$t$')
@@ -63,8 +65,8 @@ ax.legend(loc='upper right')
 mf.note(ax, (1.85, float(bisect(np.array([1.85]), 8)[0])), (1.08, 1.26), 'flat between jumps:\nslope zero almost everywhere',
         color=C['enzyme'])
 ax = axs[1]
-for K, col in zip((1, 2, 3), ('#aec7e8', '#6baed6', '#3182bd')):
-    ax.plot(a, newton(a, K)[1], '-', color=col, lw=1.1, label=f'differentiated Newton, $K={K}$')
+for K, (col, ls) in zip((1, 2, 3), newton_style):
+    ax.plot(a, newton(a, K)[1], ls, color=col, lw=1.3, label=f'differentiated Newton, $K={K}$', zorder=5)
 ax.plot(a, dt, '-', color=C['cuad'], lw=1.8, label=r'implicit $-t^\ast/(3t^{\ast 2}+a)$', zorder=4)
 ax.plot(a, np.zeros_like(a), '-', color=C['enzyme'], lw=1.8, label='differentiated bisection (every $K$)')
 ax.fill_between(a, dt, 0, color=C['enzyme'], alpha=0.07, lw=0)
