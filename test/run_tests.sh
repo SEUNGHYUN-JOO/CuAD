@@ -94,6 +94,15 @@ else
   [ "$ok" = PASS ] || fail=1
 fi
 
+if "$CUAD" -r test/unsupported/impure_calls.cu > /dev/null 2> test/out/impure_calls.err; then
+  echo "  [FAIL] reverse mode accepted loops that call impure functions"; fail=1
+else
+  n=$(grep -c "not a convergence loop: it calls the user function" test/out/impure_calls.err || true)
+  ok=FAIL; [ "$n" -eq 3 ] && ok=PASS
+  echo "  calls to impure functions rejected: $n located errors (expected 3)  [$ok]"
+  [ "$ok" = PASS ] || fail=1
+fi
+
 echo
 echo "=== GLOBAL TAPE (-DCUAD_GLOBAL_TAPE): concurrent threads on one tape, nested frames, bounds; ASan ==="
 g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -pthread -Itest test/verify_global_tape.cpp -o test/out/verify_global_tape

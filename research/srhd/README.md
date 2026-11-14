@@ -25,7 +25,7 @@ host drivers; this directory holds the experiments. Raw results are written to `
 | cooling kernel | `check_cooling.py` | `out/cooling-check.json` |
 | Table III, reliability of the run-time checks (slow contraction, zero and double roots, several roots, active bounds) | `check_reliability.py`, `check_reliability.cu`, `check_reliability.cpp` | `out/reliability.json` |
 | Fig. 5, Tables IV and V, GPU cost | `compare_c2p_gpu.py`, `c2p_gpu_compare.cu`, `c2p_manual_adjoint.cu`, `c2p_fixed.cu`, `c2p_enzyme_heap.py`, `jax_c2p_baseline.py` | `out/c2p-gpu-compare.json`, `out/c2p-enzyme-heap.json`, `out/jax-c2p-baseline.json` |
-| Table VI, cost breakdown (run-time checks removed, Enzyme with `__restrict__`, registers) | `c2p_gpu_ablation.py`, `c2p_gpu_compare.cu` built with `-DWITH_ABLATION` | `out/c2p-gpu-ablation.json` |
+| Table VI, cost breakdown (run-time checks removed, Enzyme with `__restrict__`, registers) | `c2p_gpu_ablation.py`, `c2p_gpu_compare.cu` built with `-DWITH_ABLATION` (checks off, default, every check) | `out/c2p-gpu-ablation.json` |
 | primal validation, Fig. 6 | `check_primal.py`, `exact_riemann.py` | `out/primal.json`, `out/primal-MM*.npz` |
 | smooth order, Fig. 7 Taylor test | `smooth_and_taylor.py` | `out/smooth-and-taylor.json` |
 | 2-D checks (1-D consistency, symmetry, FD, dot test) | `check2d.py`, `dot2d_kernels.cpp` | `out/check2d.json`, `out/dot2d.txt` |
@@ -48,7 +48,8 @@ JAX 0.6.2 with Optimistix 0.0.11. Double precision throughout.
 - The noisy 2-D reconstruction stops by the discrepancy principle with the threshold tau * E[misfit] computed from the
   noise level alone (tau = 1.1), not from the true medium.
 - `check_reliability.py` makes `CUAD_SOLVE_TOL`, `CUAD_SOLVE_ATOL` and `CUAD_SOLVE_MAXIT` run-time variables of the host
-  build and runs every adjoint in a forked child, so that an abort is recorded instead of ending the sweep.
+  build and runs every adjoint in a forked child, so that an abort is recorded instead of ending the sweep. It runs the
+  cases twice, with the default checks and with `-DCUAD_SOLVE_CHECK=2` (`out/reliability-every-check.json`).
 - `c2p_gpu_ablation.py` times the kernels of `c2p_gpu_compare.cu` built with `-DWITH_ABLATION`: the CuAD adjoint compiled
   with `-DCUAD_SOLVE_CHECK=0` (no run-time tests) and Enzyme on a copy of `srhd.cu` whose pointer parameters are all
   `__restrict__`. The copy exists only for the measurement.

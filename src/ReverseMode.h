@@ -1535,6 +1535,61 @@ private:
     return vd && vd->getType()->isIntegerType() ? vd : nullptr;
   }
 
+  // A user function called inside a convergence loop must be pure: its value may depend only on its arguments, and
+  // calling it again must not change anything, because the derivative code evaluates the iteration again. It passes
+  // its parameters by value and returns a floating value; its body refers to no variable other than its parameters
+  // and its own locals (no global, __device__ or __constant__ variable), dereferences no pointer, writes only its own
+  // locals, and calls only functions without a body (the math library) or pure user functions. Returns "" or why not.
+  std::string pureFunction(const FunctionDecl *fd, int depth) const {
+    if (depth > 8)
+      return "calls user functions too deeply nested to check";
+    if (!fd->getReturnType()->isRealFloatingType())
+      return "returns no floating value";
+    for (const ParmVarDecl *p : fd->parameters()) {
+      QualType t = p->getType().getCanonicalType();
+      if (t->isPointerType() || t->isReferenceType() || t->isArrayType())
+        return "takes a pointer, a reference or an array";
+    }
+    const Stmt *body = fd->getBody();
+    if (!body)
+      return "";
+    std::string why;
+    std::function<void(const Stmt *)> scan = [&](const Stmt *s) {
+      if (!s || !why.empty())
+        return;
+      if (const auto *d = dyn_cast<DeclRefExpr>(s))
+        if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+          if (vd->hasGlobalStorage() || vd->getDeclContext() != fd)
+            if (!(vd->isLocalVarDeclOrParm() && vd->getParentFunctionOrMethod() == fd)) {
+              why = "reads the variable `" + vd->getNameAsString() + "` declared outside it";
+              return;
+            }
+      if (const auto *uo = dyn_cast<UnaryOperator>(s))
+        if (uo->getOpcode() == UO_Deref) {
+          why = "dereferences a pointer";
+          return;
+        }
+      if (const auto *as = dyn_cast<ArraySubscriptExpr>(s))
+        if (as->getBase()->IgnoreParenImpCasts()->getType()->isPointerType()) {
+          why = "indexes a pointer";
+          return;
+        }
+      if (const auto *ce = dyn_cast<CallExpr>(s))
+        if (const FunctionDecl *g = calleeOf(ce))
+          if (g->hasBody() && g != fd) {
+            std::string w = pureFunction(g, depth + 1);
+            if (!w.empty()) {
+              why = "calls `" + g->getNameAsString() + "`, which " + w;
+              return;
+            }
+          }
+      for (const Stmt *c : s->children())
+        scan(c);
+    };
+    scan(body);
+    return why;
+  }
+
   const SolveInfo &solveInfo(const Stmt *loop) const {
     auto it = solve_.find(loop);
     if (it != solve_.end())
@@ -1646,16 +1701,10 @@ private:
       if (const auto *ce = dyn_cast<CallExpr>(s))
         if (const FunctionDecl *fd = calleeOf(ce))
           if (isUserDiffFn(fd)) {
-            // a call to a pure function (parameters by value, a floating result) is part of the iteration map
-            bool pure = fd->getReturnType()->isRealFloatingType();
-            for (const ParmVarDecl *p : fd->parameters()) {
-              QualType t = p->getType().getCanonicalType();
-              if (t->isPointerType() || t->isReferenceType() || t->isArrayType())
-                pure = false;
-            }
-            if (!pure) {
-              bad = "it calls the user function `" + fd->getNameAsString() +
-                    "` with pointer or reference parameters or without a floating result";
+            // a call to a pure function is part of the iteration map: see pureFunction
+            std::string why = pureFunction(fd, 0);
+            if (!why.empty()) {
+              bad = "it calls the user function `" + fd->getNameAsString() + "`, which " + why;
               return;
             }
           }
@@ -2287,7 +2336,7 @@ private:
       out += i1 + "double _cuad_jm" + id + " = 0;\n" + i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks +
              "; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_jm" + id + " = fmax(_cuad_jm" + id +
              ", fabs(" + J + "[_cuad_i][_cuad_k]));\n";
-      out += i1 + "if (CUAD_SOLVE_CHECK && (_cuad_jm" + id + " > 0.25 || !(_cuad_a" + id + " < 1e300))) {\n";
+      out += i1 + "if (CUAD_SOLVE_CHECK && (CUAD_SOLVE_CHECK > 1 || _cuad_jm" + id + " > 0.25 || !(_cuad_a" + id + " < 1e300))) {\n";
       for (size_t k = 0; k < K; ++k) {
         const std::string ks = std::to_string(k);
         out += i1 + si.comps[k].x + " = (" + si.comps[k].T + ")(" + X + "[" + ks + "] + " + D + "[" + ks +

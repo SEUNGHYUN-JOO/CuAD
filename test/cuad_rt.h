@@ -196,7 +196,9 @@ static inline void cuad_tape_free() {
 #define cuad_solve_fail() cuad_tape_fail()
 // -DCUAD_SOLVE_CHECK=0 compiles out every test above together with the extra evaluations it needs (one more
 // iteration, the second derivative evaluation). It exists to measure what the tests cost; the derivative of a loop
-// that did not reach a solution is then returned without warning.
+// that did not reach a solution is then returned without warning. The default 1 skips the second derivative
+// evaluation of a smooth update whose every entry of G_x lies below 1/4 (an optimization aimed at Newton's method,
+// which converges quadratically there; it is a heuristic, not a guarantee). -DCUAD_SOLVE_CHECK=2 never skips it.
 #ifndef CUAD_SOLVE_CHECK
 #define CUAD_SOLVE_CHECK 1
 #endif

@@ -699,7 +699,7 @@ private:
       out += i1 + "double _cuad_jm" + id + " = 0;\n" + i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks +
              "; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_jm" + id + " = fmax(_cuad_jm" + id +
              ", fabs(" + J + "[_cuad_i][_cuad_k]));\n";
-      out += i1 + "if (CUAD_SOLVE_CHECK && (_cuad_jm" + id + " > 0.25 || !(_cuad_bn" + id + " < 1e300))) {\n";
+      out += i1 + "if (CUAD_SOLVE_CHECK && (CUAD_SOLVE_CHECK > 1 || _cuad_jm" + id + " > 0.25 || !(_cuad_bn" + id + " < 1e300))) {\n";
       out += i1 + "double _cuad_y" + id + "[" + Ks + "];\n" + i1 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_y" +
              id + "[_cuad_k] = " + X + "[_cuad_k] + " + D + "[_cuad_k] + copysign(4.440892098500626e-16 * fabs(" + X +
              "[_cuad_k]), " + D + "[_cuad_k]);\n";

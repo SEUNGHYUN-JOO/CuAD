@@ -122,7 +122,7 @@ __global__ void c2p2_newton_d(const double * U, const double * U_d, double * P, 
       for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_bn0 = fmax(_cuad_bn0, fmax(fabs(_cuad_w0[_cuad_k]), fabs(_cuad_B0[_cuad_k])));
       double _cuad_jm0 = 0;
       for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_jm0 = fmax(_cuad_jm0, fabs(_cuad_J0[_cuad_i][_cuad_k]));
-      if (CUAD_SOLVE_CHECK && (_cuad_jm0 > 0.25 || !(_cuad_bn0 < 1e300))) {
+      if (CUAD_SOLVE_CHECK && (CUAD_SOLVE_CHECK > 1 || _cuad_jm0 > 0.25 || !(_cuad_bn0 < 1e300))) {
       double _cuad_y0[1];
       for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_y0[_cuad_k] = _cuad_x0[_cuad_k] + _cuad_dd0[_cuad_k] + copysign(4.440892098500626e-16 * fabs(_cuad_x0[_cuad_k]), _cuad_dd0[_cuad_k]);
       {

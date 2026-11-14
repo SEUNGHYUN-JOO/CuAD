@@ -202,13 +202,17 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   computed from one trial point and the inputs that steers the loop (it is tested in a condition
   or feeds the update of the state). All candidates are evaluated at the exit state; when several
   vanish they must agree on the root and on its derivative, otherwise the derivative traps.
-  Iteration counters (`++it`) and calls to pure functions (parameters by value, a floating
-  result) may appear in the body; loops that write other memory or nest other loops are rejected.
+  Iteration counters (`++it`) and calls to functions that CuAD verifies to be pure (parameters by
+  value, a floating result, no variable other than its parameters and locals, no pointer access,
+  only pure callees) may appear in the body; loops that write other memory or nest other loops are
+  rejected.
   At run time the exit state must lie within `CUAD_SOLVE_TOL` (relative, default 1e-6) of a
   solution: the distance (I - G_x)^-1 (G(x) - x) for a smooth update, the bracket width, or
   |R / R_t|. The derivative is evaluated again at the far side of that interval and must agree
   to `CUAD_SOLVE_AGREE` (default 1e-4); a double root or a degenerate fixed point therefore
-  traps instead of returning an arbitrary value. A bracket that collapses onto a bound because the
+  traps instead of returning an arbitrary value. The second evaluation is skipped for a smooth update
+  whose entries of G_x all lie below 1/4 (Newton's method at a simple root); `-DCUAD_SOLVE_CHECK=2`
+  never skips it and `-DCUAD_SOLVE_CHECK=0` removes all checks (for measurements only). A bracket that collapses onto a bound because the
   root lies outside it gives that bound's derivative. `CUAD_SOLVE_ATOL` (absolute, in the units
   of the state, default 0) is the absolute part of every test.- **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator

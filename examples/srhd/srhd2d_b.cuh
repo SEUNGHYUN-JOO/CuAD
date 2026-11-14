@@ -171,7 +171,7 @@ __global__ void c2p2_newton_b(const double * U, double *U_b, double * P, double 
       }
       double _cuad_jm4 = 0;
       for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_jm4 = fmax(_cuad_jm4, fabs(_cuad_J4[_cuad_i][_cuad_k]));
-      if (CUAD_SOLVE_CHECK && (_cuad_jm4 > 0.25 || !(_cuad_a4 < 1e300))) {
+      if (CUAD_SOLVE_CHECK && (CUAD_SOLVE_CHECK > 1 || _cuad_jm4 > 0.25 || !(_cuad_a4 < 1e300))) {
       p = (double)(_cuad_x4[0] + _cuad_d4[0] + copysign(4.440892098500626e-16 * fabs(_cuad_x4[0]), _cuad_d4[0]));
       {
         double D_b = 0;

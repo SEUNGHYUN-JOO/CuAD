@@ -126,7 +126,7 @@ __global__ void cool_implicit_b(const double * P, double *P_b, double * Pn, doub
       }
       double _cuad_jm3 = 0;
       for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_jm3 = fmax(_cuad_jm3, fabs(_cuad_J3[_cuad_i][_cuad_k]));
-      if (CUAD_SOLVE_CHECK && (_cuad_jm3 > 0.25 || !(_cuad_a3 < 1e300))) {
+      if (CUAD_SOLVE_CHECK && (CUAD_SOLVE_CHECK > 1 || _cuad_jm3 > 0.25 || !(_cuad_a3 < 1e300))) {
       x = (double)(_cuad_x3[0] + _cuad_d3[0] + copysign(4.440892098500626e-16 * fabs(_cuad_x3[0]), _cuad_d3[0]));
       {
         double rho_b = 0;

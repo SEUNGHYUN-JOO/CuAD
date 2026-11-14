@@ -36,6 +36,13 @@ namespace nochk { // the CuAD adjoint compiled without its run-time checks, to m
 #include "srhd_b.cuh"
 #pragma pop_macro("CUAD_SOLVE_CHECK")
 }
+namespace allchk { // the CuAD adjoint with every check, including the second derivative evaluation of Class I
+#pragma push_macro("CUAD_SOLVE_CHECK")
+#undef CUAD_SOLVE_CHECK
+#define CUAD_SOLVE_CHECK 2
+#include "srhd_b.cuh"
+#pragma pop_macro("CUAD_SOLVE_CHECK")
+}
 #endif
 extern __device__ int enzyme_dup, enzyme_const;
 template <class... A> __device__ void __enzyme_autodiff(void *, A...);
@@ -77,7 +84,7 @@ static void cuad_b(int s, int gs, const double *U, double *Ub, double *P, double
 
 // tool: 0 primal, 1 CuAD adjoint, 2 Enzyme adjoint, 3 hand-written implicit adjoint (Newton primal; solver ignored),
 // with WITH_ABLATION also 4 Enzyme on the __restrict__ kernels and 5 the CuAD adjoint without run-time checks
-// (solvers 0 and 1 only).
+// and 6 the CuAD adjoint with every check (CUAD_SOLVE_CHECK=2) (solvers 0 and 1 only).
 // Pb is copied in for every launch (the adjoints consume it). The device heap (Enzyme's cache) is ENZYME_HEAP_MIB,
 // or the environment variable C2P_HEAP_MIB if set, fixed for the process at the first call.
 extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam, const double *Pbh, double *Ubh,
@@ -104,6 +111,7 @@ extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam
 #ifdef WITH_ABLATION
   else if (tool == 4) CK(cudaFuncGetAttributes(&at, enzyme_c2p_b_restrict));
   else if (tool == 5) CK(cudaFuncGetAttributes(&at, solver == 0 ? nochk::c2p_newton_b : nochk::c2p_bisect_b));
+  else if (tool == 6) CK(cudaFuncGetAttributes(&at, solver == 0 ? allchk::c2p_newton_b : allchk::c2p_bisect_b));
 #endif
   else CK(cudaFuncGetAttributes(&at, c2p_manual_b));
   *regs = at.numRegs; *local = (int)at.localSizeBytes;
@@ -124,6 +132,9 @@ extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam
     else if (tool == 5) {
       if (solver == 0) nochk::c2p_newton_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
       else nochk::c2p_bisect_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
+    } else if (tool == 6) {
+      if (solver == 0) allchk::c2p_newton_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
+      else allchk::c2p_bisect_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
     }
 #endif
     else c2p_manual_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
