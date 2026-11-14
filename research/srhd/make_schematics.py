@@ -70,7 +70,7 @@ ax.plot(a, np.zeros_like(a), '-', color=C['enzyme'], lw=1.8, label='differentiat
 ax.fill_between(a, dt, 0, color=C['enzyme'], alpha=0.07, lw=0)
 mf.title(ax, 'b', 'derivative')
 ax.set_xlabel('$a$'); ax.set_ylabel(r'$dt/da$')
-mf.snap(ax, 'x', (1, 3)); mf.snap(ax, 'y', (-0.4, 0.05))
+mf.snap(ax, 'x', (1, 3)); mf.snap(ax, 'y', (-0.6, 0.05))
 ax.legend(loc='lower right')
 ax.text(2.0, -0.055, 'derivative missed by the differentiated bisection', fontsize=6.8, color=C['enzyme'],
         ha='center', va='center')

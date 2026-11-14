@@ -14,7 +14,7 @@ out = Path(__file__).parent / 'out'
 figs = Path(__file__).resolve().parents[2] / 'manuscript' / 'implicit_srhd' / 'figures'
 figs.mkdir(parents=True, exist_ok=True)
 
-# Style of the figures in APL Computational Physics articles: sans-serif text, closed black frame, dashed light grid,
+# Style of the figures in APL Computational Physics articles: sans-serif text, closed black frame, no grid,
 # coloured lines with black-edged markers, centred panel titles, framed legends inside the axes.
 INK, MUTED, GRID, AXIS = '#000000', '#555555', '#c8c8c8', '#000000'
 plt.rcParams.update({
@@ -25,7 +25,7 @@ plt.rcParams.update({
     'xtick.labelsize': 7, 'ytick.labelsize': 7,
     'text.color': INK, 'axes.labelcolor': INK, 'xtick.color': AXIS, 'ytick.color': AXIS,
     'axes.edgecolor': AXIS, 'axes.linewidth': 0.8, 'axes.spines.top': True, 'axes.spines.right': True,
-    'axes.grid': True, 'axes.grid.which': 'major', 'grid.color': GRID, 'grid.linewidth': 0.5, 'grid.linestyle': '--',
+    'axes.grid': False, 'axes.grid.which': 'major', 'grid.color': GRID, 'grid.linewidth': 0.5, 'grid.linestyle': '--',
     'axes.axisbelow': True,
     'lines.linewidth': 1.2, 'lines.markersize': 4.5, 'lines.markeredgecolor': 'black', 'lines.markeredgewidth': 0.6,
     'xtick.direction': 'out', 'ytick.direction': 'out',
@@ -223,7 +223,7 @@ if __name__ == '__main__' or __name__ == 'make_figures':
             title(ax, letter, ttl); ax.set_xlabel('$x$'); ax.set_ylabel(r'$\rho$')
             snap(ax, 'x', (0, 1)); snap(ax, 'y', (0, 1.05 * float(np.max(z['exact'][:, 0]))))
             if name == 'MM2':   # the thin shell, magnified
-                ins = inset_axes(ax, width='34%', height='52%', loc='upper left', borderpad=1.0,
+                ins = inset_axes(ax, width='34%', height='48%', loc='upper left', borderpad=1.9,
                                  bbox_to_anchor=(0.2, 0, 1, 1), bbox_transform=ax.transAxes)
                 ins.plot(z['x'], z['exact'][:, 0], '-', color=INK, lw=0.9)
                 ins.plot(z['x'], z['P'][:n], '-', color=C['cuad'], lw=1.2)
@@ -231,8 +231,7 @@ if __name__ == '__main__' or __name__ == 'make_figures':
                 ins.tick_params(labelsize=6); ins.grid(False)
                 for s in ('top', 'right'):
                     ins.spines[s].set_visible(True)
-                ins.set_title('thin shell', fontsize=6.5, loc='center', pad=2, color=MUTED,
-                              bbox=dict(fc='white', ec='none', pad=0.6))
+                ins.set_title('thin shell', fontsize=6.5, loc='center', pad=2, color=MUTED)
                 ax.add_patch(plt.Rectangle((0.875, 0), 0.03, 11.4, fc='none', ec=MUTED, lw=0.6, ls='--'))
     top_legend(fig, axs, 2)
     save(fig, 'fig_riemann.pdf')
