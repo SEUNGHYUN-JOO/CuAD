@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reproduce every table and figure of the manuscript "Automatic implicit adjoints of convergence loops in CUDA kernels by
-# source transformation, with an application to special-relativistic hydrodynamics" (see research/srhd/README.md).
+# source transformation and their application to special-relativistic hydrodynamics" (see research/srhd/README.md).
 #
 # Requirements: Linux (tested on WSL2 Ubuntu 22.04), CUDA 12.x and an NVIDIA GPU with fp64, g++ (C++17), the CuAD build
 # dependencies (Clang/LLVM 14 dev files), and for the comparisons:

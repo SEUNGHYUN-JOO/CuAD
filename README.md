@@ -70,6 +70,60 @@ Main results:
 }
 ```
 
+## Implicit adjoints of convergence loops (v0.3)
+
+Physics kernels often solve a small nonlinear equation in every thread with a loop that runs
+until `if (c) break;`. Differentiating the executed iterations stores every iterate, and for
+bisection it returns the derivative of the initial bracket instead of the derivative of the
+root, without any warning. CuAD 0.3 recognizes such loops in unchanged CUDA source and
+differentiates the converged solution through the relation it satisfies.
+
+<p align="center">
+  <img src="docs/figs/srhd_overview.png" width="95%" alt="Recognition of a convergence loop and the forward and reverse sweeps of program AD and CuAD">
+  <br><em>(a) The static analysis places a loop in one of three classes or rejects it; the reverse
+  sweep checks the exit state before it applies the implicit adjoint. (b) Program AD stores
+  and replays every iterate; CuAD evaluates one relation at the exit state.</em>
+</p>
+
+- **Three classes found by static analysis.** A smooth update (Newton, fixed point) gets
+  Christianson's adjoint iteration, a bracketing update (bisection) gets the derivative of
+  the root, and a loop with several iterated states (secant, Illinois regula falsi, Brent) is
+  differentiated through a residual that the analysis finds in the loop body. Nothing is
+  stored per iteration.
+- **Run-time checks instead of silent errors.** The adjoint traps when the loop left through
+  its `break` away from a solution, when it reached its iteration cap, or when the relation it
+  solved is ambiguous.
+- **Verified against independent references.** On the conservative-to-primitive step of
+  special-relativistic hydrodynamics (SRHD), the implicit adjoints of Newton, bisection,
+  regula falsi and Brent match a 50-digit Jacobian to a median relative error below 1e-13.
+  Enzyme's differentiated bisection has a median error of 0.41 on the same states.
+- **GPU cost.** At 2^20 cells the implicit adjoint costs 1.8 times the Newton primal and 1.1
+  times the bisection primal. Enzyme's differentiated iterations take 790 and 700 times as long as the CuAD adjoint.
+- **Application.** The discrete adjoint of 1-D and 2-D SRHD solvers written as ordinary CUDA
+  reconstructs the density of a medium from the passage of a relativistic shock: 0.18 % error
+  in 1-D, and 3456 unknowns to 0.28 % in about one minute on the GPU in 2-D.
+
+<p align="center">
+  <img src="docs/figs/srhd_bisection.png" width="90%" alt="Bisection iterates and their derivative against the implicit derivative">
+  <br><em>Root of t³ + a t − 5 = 0. Bisection converges to the root in value but its
+  differentiated iterates keep the derivative of the constant bracket (zero) for every K.</em>
+</p>
+
+<p align="center">
+  <img src="docs/figs/srhd_gpu_cost.png" width="90%" alt="Time of one C2P gradient on the GPU">
+  <br><em>Time of one conservative-to-primitive gradient on an RTX 5080 against the number of cells.</em>
+</p>
+
+<p align="center">
+  <img src="docs/figs/srhd_inverse1d.png" width="90%" alt="1-D density reconstruction with the exact gradient and the differentiated bisection">
+  <br><em>1-D reconstruction with the bisection C2P. With the gradient of the differentiated
+  bisection the optimizer stops early and reports convergence.</em>
+</p>
+
+The scripts, drivers and raw results of these experiments are in
+[`research/srhd/`](research/srhd/); `bash research/srhd/reproduce_all.sh` regenerates every
+table and figure.
+
 ## Example
 
 Input (`test/cases/scalar.cu`):
@@ -139,11 +193,16 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   gets p_b -= r_p s / r_m: differentiating its iterations would give the derivative of the
   initial bracket, not of the root. A loop with several iterated variables (secant, regula
   falsi, Brent) is differentiated through the residual it evaluates: a value computed from one
-  trial point and the inputs, chosen at run time as the first that vanishes at the exit state.
+  trial point and the inputs that steers the loop (it is tested in a condition or feeds the
+  update of the state). All candidates are evaluated at the exit state; when several vanish
+  they must agree on the root and on its derivative, otherwise the adjoint traps.
   Loops that change memory, call user functions or nest other loops are rejected. At run time
-  the exit state must be a fixed point, a collapsed bracket or a root (`CUAD_SOLVE_TOL`,
-  relative, default 1e-6), otherwise the adjoint traps; a bracket that collapses onto a bound
-  because the root lies outside it gives that bound's derivative.
+  the exit state must be a fixed point, a collapsed bracket or a root, otherwise the adjoint
+  traps; a bracket that collapses onto a bound because the root lies outside it gives that
+  bound's derivative. The tolerances are macros of `cuad_rt.h`: `CUAD_SOLVE_TOL` (relative,
+  default 1e-6), `CUAD_SOLVE_ATOL` (absolute, in the units of the state, default 0),
+  `CUAD_SOLVE_AGREE` (agreement of several vanishing residuals, default 1e-4) and
+  `CUAD_SOLVE_MAXIT` (cap of the adjoint fixed-point iteration, default 200).
 - **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator
   statements, bare `{ ... }` blocks.
