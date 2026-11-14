@@ -149,33 +149,46 @@ if __name__ == '__main__' or __name__ == 'make_figures':
     top_legend(fig, axs, 4)
     save(fig, 'fig_iteration_sweep.pdf')
 
-    # Fig. 4: C2P Jacobian error over the state space (c2p_robustness.py)
+    # Fig. 4: C2P Jacobian error over the state space (c2p_robustness.py). (a) the error map in discrete decades;
+    # (b) every state's error against cond(A) * eps, which shows that the conditioning of the problem sets the error
     z = np.load(out / 'c2p-robustness.npz')
-    fig, axs = new(TWO, 2.5, ncols=2)
+    fig, axs = new(TWO, 2.6, ncols=2)
     lt, lw = np.log10(z['theta']), np.log10(z['W'])
     edges = lambda c: np.concatenate([[1.5 * c[0] - 0.5 * c[1]], 0.5 * (c[1:] + c[:-1]), [1.5 * c[-1] - 0.5 * c[-2]]])
     excluded = z['rec_bisect'] >= 1e-8   # primal less accurate than 1e-8: not in Table I
     print('Fig. 4: states', excluded.size, 'excluded', int(excluded.sum()))
-    for ax, key, (letter, ttl), cl, cmap in (
-            (axs[0], 'err_bisect', ('a', 'error of the CuAD adjoint of the bisection C2P'),
-             r'$\log_{10}$ relative error', 'viridis'),
-            (axs[1], 'cond', ('b', r'condition number of $\partial U/\partial P$'),
-             r'$\log_{10}$ condition number', 'cividis')):
-        v = np.log10(np.maximum(z[key], 1e-17))
-        im = ax.pcolormesh(edges(lt), edges(lw), v, cmap=cmap, shading='flat', rasterized=True)
-        field_axes(ax)
-        ax.set_xlabel(r'$\log_{10}(p/\rho)$'); ax.set_ylabel(r'$\log_{10} W$'); title(ax, letter, ttl)
-        snap(ax, 'x', (lt[0], lt[-1])); snap(ax, 'y', (lw[0], lw[-1]))   # cell centres sit on the sampled states
-        if key == 'err_bisect':
-            T, Wg = np.meshgrid(lt, lw)
-            ax.plot(T[excluded], Wg[excluded], 'x', color='white', ms=3.5, mew=0.9, clip_on=False,
-                    label='primal itself less accurate than $10^{-8}$')
-            ax.legend(loc='lower right', fontsize=6.3, labelcolor='white', handletextpad=0.2, borderaxespad=0.4,
-                      frameon=False)
-        cb = plt.colorbar(im, ax=ax, label=cl, aspect=25)
-        snap_colorbar(im, cb, float(np.floor(v.min())), float(np.ceil(v.max())))
+    err = np.maximum(z['err_bisect'], 1e-17)
+    v = np.log10(err)
+    lo, hi = float(np.floor(v.min())), float(np.ceil(v.max()))
+    levels = np.arange(lo, hi + 1)
+    from matplotlib.colors import BoundaryNorm
+    cmap = plt.get_cmap('viridis', len(levels) - 1)
+    ax = axs[0]
+    im = ax.pcolormesh(edges(lt), edges(lw), v, cmap=cmap, norm=BoundaryNorm(levels, cmap.N), shading='flat',
+                       rasterized=True)
+    field_axes(ax)
+    ax.set_xlabel(r'$\log_{10}(p/\rho)$'); ax.set_ylabel(r'$\log_{10} W$')
+    title(ax, 'a', 'error of the CuAD adjoint of the bisection C2P')
+    snap(ax, 'x', (lt[0], lt[-1])); snap(ax, 'y', (lw[0], lw[-1]))   # cell centres sit on the sampled states
+    T, Wg = np.meshgrid(lt, lw)
+    ax.plot(T[excluded], Wg[excluded], 'x', color='white', mec='white', ms=3.5, mew=0.9, clip_on=False,
+            label='primal itself less accurate than $10^{-8}$')
+    ax.legend(loc='lower right', fontsize=6.3, labelcolor='white', handletextpad=0.2, borderaxespad=0.4, frameon=False)
+    cb = plt.colorbar(im, ax=ax, label=r'$\log_{10}$ relative error', aspect=25, ticks=levels)
+    cb.outline.set_linewidth(0.5)
+    ax = axs[1]
+    ce = z['cond'] * np.finfo(float).eps
+    xs = np.array([1e-16, 1e-4])
+    ax.loglog(xs, xs, '-', color=MUTED, lw=0.8, label=r'$\mathrm{cond}(A)\,\epsilon_{\rm mach}$')
+    ax.loglog(xs, 0.08 * xs, '--', color=MUTED, lw=0.8, label=r'$0.08\,\mathrm{cond}(A)\,\epsilon_{\rm mach}$')
+    ax.loglog(ce[~excluded], err[~excluded], 'o', color=C['cuad'], ms=3.6, label='states of Table I')
+    ax.loglog(ce[excluded], err[excluded], 'x', color=C['enzyme'], mec=C['enzyme'], ms=4, mew=0.9,
+              label='primal worse than $10^{-8}$')
+    title(ax, 'b', r'error against $\mathrm{cond}(A)\,\epsilon_{\rm mach}$')
+    ax.set_xlabel(r'$\mathrm{cond}(A)\,\epsilon_{\rm mach}$'); ax.set_ylabel('relative error')
+    snap(ax, 'x', (1e-16, 1e-4)); snap(ax, 'y', (1e-17, 1e-8))
+    ax.legend(loc='upper left', fontsize=6.0, handlelength=1.6, borderaxespad=0.3)
     save(fig, 'fig_c2p_robustness.pdf')
-
     # Fig. 5: GPU cost of the C2P adjoint against cell count (compare_c2p_gpu.py, jax_c2p_baseline.py)
     g = json.loads((out / 'c2p-gpu-compare.json').read_text())
     jx = json.loads((out / 'jax-c2p-baseline.json').read_text())['rows']
