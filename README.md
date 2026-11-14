@@ -203,7 +203,9 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   bound's derivative. The tolerances are macros of `cuad_rt.h`: `CUAD_SOLVE_TOL` (relative,
   default 1e-6), `CUAD_SOLVE_ATOL` (absolute, in the units of the state, default 0),
   `CUAD_SOLVE_AGREE` (agreement of several vanishing residuals, default 1e-4) and
-  `CUAD_SOLVE_MAXIT` (cap of the adjoint fixed-point iteration, default 200).
+  `CUAD_SOLVE_MAXIT` (cap of the adjoint fixed-point iteration, default 200). The adjoint iteration stops at a
+  relative change of 1e-14 and needs about log(1e-14)/log(rho) sweeps for a loop that contracts at rate rho, so raise
+  `CUAD_SOLVE_MAXIT` for slowly contracting loops (rho >= 0.9); otherwise their adjoint traps.
 - **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator
   statements, bare `{ ... }` blocks.

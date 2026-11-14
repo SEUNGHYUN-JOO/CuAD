@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Reproduce every table and figure of the manuscript "Automatic implicit adjoints of convergence loops in CUDA kernels by
-# source transformation and their application to special-relativistic hydrodynamics" (see research/srhd/README.md).
+# Reproduce every table and figure of the manuscript "Automatic implicit adjoints of convergence loops in CUDA kernels for
+# relativistic hydrodynamics" (see research/srhd/README.md).
 #
 # Requirements: Linux (tested on WSL2 Ubuntu 22.04), CUDA 12.x and an NVIDIA GPU with fp64, g++ (C++17), the CuAD build
 # dependencies (Clang/LLVM 14 dev files), and for the comparisons:
@@ -57,6 +57,10 @@ GF="-std=c++17 -O3 -fno-fast-math -ffp-contract=off $CUDA -fPIC -shared -Itest -
 "$CL" $GF $S/srhd_gpu.cu -o $O/srhd_gpu.so || die srhd_gpu
 "$CL" $GF $S/srhd2d_gpu.cu -o $O/srhd2d_gpu.so || die srhd2d_gpu
 "$CL" $GF -I$S -I$O $ENZ $S/c2p_gpu_compare.cu -o $O/c2p_gpu_compare.so || die c2p_gpu_compare
+# cost breakdown: the CuAD adjoint without its run-time checks, Enzyme on kernels with __restrict__ pointers
+$PY $S/strip_checks.py $E/srhd_b.cuh $O/srhd_b_nocheck.cuh > /dev/null || die strip_checks
+sed -E 's/((const )?(double|int) )\*([A-Za-z_][A-Za-z0-9_]*)([,)])/\1*__restrict__ \4\5/g' $E/srhd.cu > $O/srhd_restrict.cu
+"$CL" $GF -DWITH_ABLATION -I$S -I$O $ENZ $S/c2p_gpu_compare.cu -o $O/c2p_gpu_ablation.so || die c2p_gpu_ablation
 nvidia-smi --query-gpu=name,driver_version,utilization.gpu,memory.used --format=csv,noheader | tee $O/gpu-env.txt
 
 step "verification (Sec. VI)"
@@ -67,11 +71,13 @@ $PY $S/check_adjoint.py > /dev/null || die check_adjoint                       #
 $PY $S/check_enzyme_host.py > /dev/null || die enzyme_host
 [ -n "$CLADINC" ] && { $PY $S/check_clad_host.py > /dev/null; $O/clad_newton_min > $O/clad-newton-min.txt; }
 $PY $S/check_cooling.py || die cooling
+$PY $S/check_reliability.py > /dev/null || die reliability                     # Table III
 $O/dot2d > $O/dot2d.txt || die dot2d
 
 step "performance (Sec. VII)"
 $PY $S/compare_c2p_gpu.py || die compare_gpu                                   # Fig. 5, Table IV
 $PY $S/c2p_enzyme_heap.py || die heap
+$PY $S/c2p_gpu_ablation.py > /dev/null || die ablation                         # Table VI
 [ -x "$JAXPY" ] && $JAXPY $S/jax_c2p_baseline.py
 
 step "application (Sec. VIII)"
@@ -82,6 +88,9 @@ $PY $S/check2d.py || die check2d
 bash $S/run_reproduction.sh || die reproduction                                # Table VI, Fig. 8
 $PY $S/inverse_density.py 512 1 cuad 0.01 1e-6 0 > /dev/null || die inverse_noise
 $PY $S/inverse_density.py 512 1 enzyme 0.01 1e-6 0 > /dev/null || die inverse_noise_enzyme
+for r in 2 4; do for tool in cuad enzyme; do                                     # observations from a finer grid
+  $PY $S/inverse_density.py 256 1 $tool 0 1e-3 0 $r > /dev/null || die crossgrid
+done; done
 $PY $S/inverse_density2d.py 64 1 0 || die inverse2d                            # Fig. 9
 $PY $S/inverse_density2d.py 64 1 0.01 || die inverse2d_noise
 

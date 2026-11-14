@@ -7,7 +7,10 @@ Observations: rho and p on every cell at t = 0.15, 0.3, 0.45, 0.6, with 1 % Gaus
 on every cell right of the slab. Objective: misfit + 0.5 beta dx sum ((d/dx) log rho0)^2, L-BFGS-B.
 Gradient: CuAD adjoint of the whole integration with the chosen C2P (bisection by default; Enzyme's gradient
 through that C2P is wrong: check_enzyme_host.py). A finite-difference gradient needs two solves per unknown.
-Usage: python inverse_density.py [n] [c2p: 0 newton, 1 bisection] [gradient: cuad (GPU) | enzyme (host)] [noise] [beta] [case: 0 sinusoid, 1 clumps, k>=2 random field seed k]
+Usage: python inverse_density.py [n] [c2p: 0 newton, 1 bisection] [gradient: cuad (GPU) | enzyme (host)] [noise] [beta] [case: 0 sinusoid, 1 clumps, k>=2 random field seed k] [refine]
+With refine = r > 1 the observations come from a grid r times finer (same scheme, time step cfl dx/r) and are averaged
+over blocks of r cells, so that the reconstruction on n cells must cope with a discretization error in the data.
+These runs are written as inverse-crossgrid-*.
 With `enzyme` the objective and its gradient come from Enzyme v0.0.307 applied to the same source on the host
 (enzyme_srhd_host.cpp); observations are the same GPU solution in both cases.
 """
@@ -47,13 +50,19 @@ dx = 1.0 / n
 x = (np.arange(n) + 0.5) * dx
 free = x >= 0.15
 case = int(sys.argv[6]) if len(sys.argv) > 6 else 0
-if case == 0:    # windowed sinusoid
-    medium = 1 + 0.4 * np.sin(6 * np.pi * x) * np.exp(-((x - 0.5) / 0.18) ** 2)
-elif case == 1:  # two clumps, one dense and one rarefied
-    medium = 1 + 0.6 * np.exp(-((x - 0.35) / 0.04) ** 2) - 0.35 * np.exp(-((x - 0.62) / 0.06) ** 2)
-else:            # smooth random field: five Fourier modes with amplitudes drawn from seed `case`
-    cr = np.random.default_rng(case)
-    medium = 1 + sum(cr.uniform(-0.12, 0.12) * np.sin(k * np.pi * x + cr.uniform(0, 2 * np.pi)) for k in range(2, 12, 2))
+refine = int(sys.argv[7]) if len(sys.argv) > 7 else 1
+
+
+def medium_at(x):
+    if case == 0:    # windowed sinusoid
+        return 1 + 0.4 * np.sin(6 * np.pi * x) * np.exp(-((x - 0.5) / 0.18) ** 2)
+    if case == 1:    # two clumps, one dense and one rarefied
+        return 1 + 0.6 * np.exp(-((x - 0.35) / 0.04) ** 2) - 0.35 * np.exp(-((x - 0.62) / 0.06) ** 2)
+    cr = np.random.default_rng(case)  # smooth random field: five Fourier modes with amplitudes drawn from seed `case`
+    return 1 + sum(cr.uniform(-0.12, 0.12) * np.sin(k * np.pi * x + cr.uniform(0, 2 * np.pi)) for k in range(2, 12, 2))
+
+
+medium = medium_at(x)
 rho_true = np.where(free, medium, 1.0)
 p0 = np.where(free, 0.1, 10.0)
 w = np.concatenate([np.ones(n), np.zeros(n), np.ones(n)])  # density and pressure observed
@@ -68,7 +77,18 @@ def gpu_run(rho0, obs, grad):
     return J.value, W0b[:n], P
 
 rng = np.random.default_rng(3)
-_, _, P_true = gpu_run(rho_true, np.zeros(len(kst) * 3 * n), False)
+if refine == 1:
+    _, _, P_true = gpu_run(rho_true, np.zeros(len(kst) * 3 * n), False)
+else:  # observations from a finer grid, averaged over the r fine cells of each coarse cell
+    nf = n * refine; xf = (np.arange(nf) + 0.5) / nf; freef = xf >= 0.15
+    kstf = np.ascontiguousarray(np.round(times_obs / (cfl / nf)).astype(np.int32))
+    Jf = ct.c_double(); gbf = ct.c_double(); tf = np.zeros(2); Pf = np.zeros(len(kstf) * 3 * nf)
+    st = gpu(nf, int(kstf[-1]), cfl, solver, np.concatenate([np.where(freef, medium_at(xf), 1.0), np.zeros(nf),
+             np.where(freef, 0.1, 10.0)]), G, len(kstf), kstf, np.zeros(len(kstf) * 3 * nf),
+             np.concatenate([np.ones(nf), np.zeros(nf), np.ones(nf)]), ct.byref(Jf), None, ct.byref(gbf), tf,
+             Pf.ctypes.data)
+    assert st == 0, st
+    P_true = np.ascontiguousarray(Pf.reshape(len(kstf), 3, n, refine).mean(axis=-1).ravel())
 obs = np.ascontiguousarray(P_true * (1 + noise * rng.normal(size=P_true.size)))
 
 def full(z):
@@ -114,6 +134,9 @@ wall = time.time() - t0
 rho_fit = full(res.x)
 misfit_noise = 0.5 * dx * np.sum((w * (P_true - obs).reshape(len(kst), 3 * n)) ** 2 / np.maximum(w, 1e-300))
 summary = dict(case=case, gradient=tool, n=n, unknowns=m_free, steps=steps, c2p=['newton', 'bisection'][solver], noise=noise, beta=beta,
+               observation_grid_refinement=refine,
+               misfit_of_the_coarse_truth=float(gpu_run(rho_true, obs, False)[0]) if refine > 1 else None,
+               min_rel_l2_error_rho0=float(min(h['rel_l2_error_rho0'] for h in hist)) if hist else None,
                observation_times=times_obs.tolist(), iterations=int(res.nit), objective_evaluations=int(res.nfev),
                message=str(res.message), objective_initial=float(f0), objective_final=float(res.fun),
                misfit_of_the_truth=float(misfit_noise),
@@ -122,6 +145,7 @@ summary = dict(case=case, gradient=tool, n=n, unknowns=m_free, steps=steps, c2p=
                gpu_reverse_ms_total=stats['gpu_reverse_ms'], gradient_checks=checks,
                fd_gradient_cost='2 x %d forward solves per gradient' % m_free)
 print(json.dumps(summary), flush=True)
-np.savez(out / f'inverse-density-{n}-{solver}-{tool}-noise{noise:g}-case{case}.npz', x=x, rho_true=rho_true, rho_fit=rho_fit, obs=obs, P_true=P_true,
-         kst=kst)
-(out / f'inverse-density-{n}-{solver}-{tool}-noise{noise:g}-case{case}.json').write_text(json.dumps(dict(summary=summary, history=hist), indent=2) + '\n')
+stem = (f'inverse-density-{n}-{solver}-{tool}-noise{noise:g}-case{case}' if refine == 1 else
+        f'inverse-crossgrid-{n}-{solver}-{tool}-refine{refine}-noise{noise:g}-case{case}')
+np.savez(out / f'{stem}.npz', x=x, rho_true=rho_true, rho_fit=rho_fit, obs=obs, P_true=P_true, kst=kst)
+(out / f'{stem}.json').write_text(json.dumps(dict(summary=summary, history=hist), indent=2) + '\n')

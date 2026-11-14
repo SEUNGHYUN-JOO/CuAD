@@ -6,7 +6,6 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib import font_manager
 from matplotlib.ticker import FixedLocator, LogLocator, MaxNLocator, NullFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
@@ -15,34 +14,31 @@ out = Path(__file__).parent / 'out'
 figs = Path(__file__).resolve().parents[2] / 'manuscript' / 'implicit_srhd' / 'figures'
 figs.mkdir(parents=True, exist_ok=True)
 
-# Times New Roman when it is installed (also from a Windows font folder under WSL), else a metric clone.
-for d in (Path('/mnt/c/Windows/Fonts'), Path('C:/Windows/Fonts'), Path('/usr/share/fonts/truetype/msttcorefonts')):
-    for name in ('times.ttf', 'timesi.ttf', 'timesbd.ttf', 'timesbi.ttf', 'Times_New_Roman.ttf'):
-        if (d / name).exists():
-            font_manager.fontManager.addfont(str(d / name))
-INK, MUTED, GRID, AXIS = '#1d2733', '#6b7280', '#e7e9ec', '#4a5059'
+# Style of the figures in APL Computational Physics articles: sans-serif text, closed black frame, dashed light grid,
+# coloured lines with black-edged markers, centred panel titles, framed legends inside the axes.
+INK, MUTED, GRID, AXIS = '#000000', '#555555', '#c8c8c8', '#000000'
 plt.rcParams.update({
-    'font.family': 'serif',
-    'font.serif': ['Times New Roman', 'TeX Gyre Termes', 'Nimbus Roman', 'STIXGeneral'],
-    'mathtext.fontset': 'stix',
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['DejaVu Sans', 'Arial', 'Liberation Sans'],
+    'mathtext.fontset': 'dejavusans',
     'font.size': 8, 'axes.labelsize': 8, 'axes.titlesize': 8, 'legend.fontsize': 7,
     'xtick.labelsize': 7, 'ytick.labelsize': 7,
     'text.color': INK, 'axes.labelcolor': INK, 'xtick.color': AXIS, 'ytick.color': AXIS,
-    'xtick.labelcolor': INK, 'ytick.labelcolor': INK,
-    'axes.edgecolor': AXIS, 'axes.linewidth': 0.7, 'axes.spines.top': False, 'axes.spines.right': False,
-    'axes.grid': True, 'axes.grid.which': 'major', 'grid.color': GRID, 'grid.linewidth': 0.6, 'axes.axisbelow': True,
-    'lines.linewidth': 1.4, 'lines.markersize': 4.2, 'lines.markeredgecolor': 'white', 'lines.markeredgewidth': 0.6,
-    'lines.solid_capstyle': 'round', 'lines.dash_capstyle': 'round',
+    'axes.edgecolor': AXIS, 'axes.linewidth': 0.8, 'axes.spines.top': True, 'axes.spines.right': True,
+    'axes.grid': True, 'axes.grid.which': 'major', 'grid.color': GRID, 'grid.linewidth': 0.5, 'grid.linestyle': '--',
+    'axes.axisbelow': True,
+    'lines.linewidth': 1.2, 'lines.markersize': 4.5, 'lines.markeredgecolor': 'black', 'lines.markeredgewidth': 0.6,
     'xtick.direction': 'out', 'ytick.direction': 'out',
-    'xtick.major.width': 0.7, 'ytick.major.width': 0.7, 'xtick.minor.width': 0.5, 'ytick.minor.width': 0.5,
-    'xtick.major.size': 3, 'ytick.major.size': 3, 'xtick.minor.size': 1.6, 'ytick.minor.size': 1.6,
-    'legend.frameon': False, 'legend.handlelength': 2.0, 'legend.columnspacing': 1.4, 'legend.handletextpad': 0.5,
-    'axes.titlelocation': 'left', 'axes.titlepad': 6, 'figure.dpi': 200, 'savefig.dpi': 600,
+    'xtick.major.width': 0.8, 'ytick.major.width': 0.8, 'xtick.minor.width': 0.6, 'ytick.minor.width': 0.6,
+    'xtick.major.size': 3.5, 'ytick.major.size': 3.5, 'xtick.minor.size': 2, 'ytick.minor.size': 2,
+    'legend.frameon': True, 'legend.edgecolor': '0.6', 'legend.fancybox': False, 'legend.framealpha': 1.0,
+    'legend.handlelength': 2.2, 'legend.columnspacing': 1.4, 'legend.handletextpad': 0.5,
+    'axes.titlelocation': 'center', 'axes.titlepad': 5, 'figure.dpi': 200, 'savefig.dpi': 600,
     'pdf.fonttype': 42, 'ps.fonttype': 42,
 })
-# colour-blind-safe categorical slots in a fixed order: one colour per method in every figure
-C = {'cuad': '#2a78d6', 'enzyme': '#eb6834', 'manual': '#1baf7a', 'jax': '#6250d6', 'fixed': '#86b6ef',
-     'tangent': '#9aa1aa', 'value': INK, 'primal': INK}
+# one colour and one marker per method in every figure
+C = {'cuad': '#1f77b4', 'enzyme': '#d62728', 'manual': '#2ca02c', 'jax': '#9467bd', 'fixed': '#17becf',
+     'tangent': '#7f7f7f', 'value': INK, 'primal': INK}
 TWO, ONE = 6.69, 3.37   # AIP figure widths in inches (two columns, one column)
 
 
@@ -51,7 +47,7 @@ def new(w, h, **kw):
 
 
 def title(ax, letter, text):
-    ax.set_title(r'$\mathbf{(' + letter + r')}$  ' + text)
+    ax.set_title(f'({letter}) {text}')
 
 
 def top_legend(fig, axs, ncol):
@@ -60,7 +56,7 @@ def top_legend(fig, axs, ncol):
     for ax in np.ravel(axs):
         for h, l in zip(*ax.get_legend_handles_labels()):
             seen.setdefault(l, h)
-    fig.legend(seen.values(), seen.keys(), loc='outside upper center', ncol=ncol)
+    fig.legend(seen.values(), seen.keys(), loc='outside upper center', ncol=ncol, frameon=False)
 
 
 def note(ax, xy, xytext, s, color=INK, ha='left', **kw):
@@ -135,14 +131,16 @@ if __name__ == '__main__' or __name__ == 'make_figures':
                                     [('a', 'Newton'), ('b', 'fixed point'), ('c', 'bisection')]):
         r = [x for x in rows if x['solver'] == s and x['t0'] == 1]
         K = np.array([x['K'] for x in r])
+        me = 1 if s == 'newton' else 5   # markers on every fifth iterate where K runs to 60
         ax.semilogy(K, clip([x['value_error'] for x in r]), '-', color=C['value'], lw=1.0,
                     label=r'value error $|t_K-t^\ast|/t^\ast$')
         if s != 'bisection':
             ax.semilogy(K, clip([x['cuad_tangent_unrolled'] for x in r]), 's-', color=C['tangent'], lw=1.0, ms=3.4,
-                        label='CuAD tangent of the iterations')
+                        markevery=me, label='CuAD tangent of the iterations')
         ax.semilogy(K, clip([x['enzyme_unrolled'] for x in r]), 'D-', color=C['enzyme'], lw=1.0, ms=3.2,
-                    label='Enzyme reverse of the iterations')
-        ax.semilogy(K, clip([x['cuad_implicit'] for x in r]), 'o-', color=C['cuad'], label='CuAD implicit adjoint')
+                    markevery=me, label='Enzyme reverse of the iterations')
+        ax.semilogy(K, clip([x['cuad_implicit'] for x in r]), 'o-', color=C['cuad'], markevery=me,
+                    label='CuAD implicit adjoint')
         title(ax, letter, lab)
         ax.set_xlabel('iterations $K$')
         snap(ax, 'x', (0, 60 if s != 'newton' else 12))
@@ -174,7 +172,8 @@ if __name__ == '__main__' or __name__ == 'make_figures':
             T, Wg = np.meshgrid(lt, lw)
             ax.plot(T[excluded], Wg[excluded], 'x', color='white', ms=3.5, mew=0.9, clip_on=False,
                     label='primal itself less accurate than $10^{-8}$')
-            ax.legend(loc='lower right', fontsize=6.3, labelcolor='white', handletextpad=0.2, borderaxespad=0.4)
+            ax.legend(loc='lower right', fontsize=6.3, labelcolor='white', handletextpad=0.2, borderaxespad=0.4,
+                      frameon=False)
         cb = plt.colorbar(im, ax=ax, label=cl, aspect=25)
         snap_colorbar(im, cb, float(np.floor(v.min())), float(np.ceil(v.max())))
     save(fig, 'fig_c2p_robustness.pdf')
@@ -222,20 +221,21 @@ if __name__ == '__main__' or __name__ == 'make_figures':
         f = out / f'primal-{name}-1600.npz'
         if f.exists():
             z = np.load(f); n = z['x'].size
-            ax.fill_between(z['x'], 0, z['exact'][:, 0], color=C['cuad'], alpha=0.08, lw=0)
             ax.plot(z['x'], z['exact'][:, 0], '-', color=INK, lw=0.9, label='exact solution')
             ax.plot(z['x'], z['P'][:n], '-', color=C['cuad'], lw=1.2, alpha=0.9, label='solver with $n=1600$')
             title(ax, letter, ttl); ax.set_xlabel('$x$'); ax.set_ylabel(r'$\rho$')
             snap(ax, 'x', (0, 1)); snap(ax, 'y', (0, 1.05 * float(np.max(z['exact'][:, 0]))))
             if name == 'MM2':   # the thin shell, magnified
-                ins = inset_axes(ax, width='34%', height='52%', loc='upper left', borderpad=1.4)
+                ins = inset_axes(ax, width='34%', height='52%', loc='upper left', borderpad=1.0,
+                                 bbox_to_anchor=(0.2, 0, 1, 1), bbox_transform=ax.transAxes)
                 ins.plot(z['x'], z['exact'][:, 0], '-', color=INK, lw=0.9)
                 ins.plot(z['x'], z['P'][:n], '-', color=C['cuad'], lw=1.2)
                 ins.set_xlim(0.875, 0.905); ins.set_ylim(0, 12); ins.set_xticks([0.88, 0.9]); ins.set_yticks([0, 5, 10])
                 ins.tick_params(labelsize=6); ins.grid(False)
                 for s in ('top', 'right'):
                     ins.spines[s].set_visible(True)
-                ins.set_title('thin shell', fontsize=6.5, loc='center', pad=2, color=MUTED)
+                ins.set_title('thin shell', fontsize=6.5, loc='center', pad=2, color=MUTED,
+                              bbox=dict(fc='white', ec='none', pad=0.6))
                 ax.add_patch(plt.Rectangle((0.875, 0), 0.03, 11.4, fc='none', ec=MUTED, lw=0.6, ls='--'))
     top_legend(fig, axs, 2)
     save(fig, 'fig_riemann.pdf')
@@ -266,8 +266,7 @@ if __name__ == '__main__' or __name__ == 'make_figures':
         if f.exists():
             z = np.load(f)
             d = z['rho_fit'] - z['rho_true']
-            axs[0].fill_between(z['x'], 0, d, color=C[tool], alpha=0.18 if tool == 'enzyme' else 0.35, lw=0)
-            axs[0].plot(z['x'], d, '-', color=C[tool], lw=0.8, label=names[tool])
+            axs[0].plot(z['x'], d, '-', color=C[tool], lw=0.9, label=names[tool])
             hist[tool] = [x['rel_l2_error_rho0'] for x in json.loads(j.read_text())['history']]
             axs[1].semilogy(np.arange(1, len(hist[tool]) + 1), hist[tool], '-', color=C[tool], label=names[tool])
     he = hist['enzyme']; hc = hist['cuad']
@@ -299,7 +298,7 @@ if __name__ == '__main__' or __name__ == 'make_figures':
         for ax, (field, (letter, ttl), cmap, (lo, hi)) in zip(axs, panels):
             im = ax.imshow(field.reshape(n, n), origin='lower', extent=[0, 1, 0, 1], cmap=cmap, interpolation='bicubic')
             field_axes(ax)
-            ax.set_title(r'$\mathbf{(' + letter + r')}$  ' + ttl, fontsize=7)
+            ax.set_title(f'({letter}) ' + ttl, fontsize=7)
             ax.set_xticks([0, 0.5, 1]); ax.set_yticks([0, 0.5, 1])
             ax.set_aspect('equal'); ax.set_xlabel('$x$')
             cb = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.03); cb.ax.tick_params(labelsize=6)

@@ -50,7 +50,7 @@ def newton(av, K, t0=2.0):
 
 t = root(a); dt = -t / (3 * t * t + a)
 C, INK, MUTED = mf.C, mf.INK, mf.MUTED
-shade = ['#f7c3ac', '#f09a76', '#eb6834']          # light to full orange: more bisection steps
+shade = ['#f4a6a7', '#e8585a', '#d62728']          # light to full red: more bisection steps
 fig, axs = mf.new(mf.TWO, 2.6, ncols=2)
 ax = axs[0]
 for K, col in zip((4, 6, 8), shade):
@@ -61,9 +61,9 @@ ax.set_xlabel('$a$'); ax.set_ylabel('$t$')
 mf.snap(ax, 'x', (1, 3)); mf.snap(ax, 'y', (1.2, 1.6))
 ax.legend(loc='upper right')
 mf.note(ax, (1.85, float(bisect(np.array([1.85]), 8)[0])), (1.08, 1.26), 'flat between jumps:\nslope zero almost everywhere',
-        color='#b4461c')
+        color=C['enzyme'])
 ax = axs[1]
-for K, col in zip((1, 2, 3), ('#c9d9f0', '#86b6ef', '#4f8fdc')):
+for K, col in zip((1, 2, 3), ('#aec7e8', '#6baed6', '#3182bd')):
     ax.plot(a, newton(a, K)[1], '-', color=col, lw=1.1, label=f'differentiated Newton, $K={K}$')
 ax.plot(a, dt, '-', color=C['cuad'], lw=1.8, label=r'implicit $-t^\ast/(3t^{\ast 2}+a)$', zorder=4)
 ax.plot(a, np.zeros_like(a), '-', color=C['enzyme'], lw=1.8, label='differentiated bisection (every $K$)')
@@ -72,6 +72,6 @@ mf.title(ax, 'b', 'derivative')
 ax.set_xlabel('$a$'); ax.set_ylabel(r'$dt/da$')
 mf.snap(ax, 'x', (1, 3)); mf.snap(ax, 'y', (-0.4, 0.05))
 ax.legend(loc='lower right')
-ax.text(2.0, -0.055, 'derivative missed by the differentiated bisection', fontsize=6.8, color='#b4461c',
+ax.text(2.0, -0.055, 'derivative missed by the differentiated bisection', fontsize=6.8, color=C['enzyme'],
         ha='center', va='center')
 mf.save(fig, 'fig_bisection.pdf')

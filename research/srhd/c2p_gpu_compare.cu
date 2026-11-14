@@ -21,6 +21,18 @@ namespace dev { // the same kernels as device functions, for Enzyme
 #include "c2p_fixed.cu"
 #pragma pop_macro("__global__")
 }
+#ifdef WITH_ABLATION
+namespace devr { // the C2P kernels with every pointer parameter declared __restrict__ (srhd_restrict.cu)
+#pragma push_macro("__global__")
+#undef __global__
+#define __global__ __device__
+#include "srhd_restrict.cu"
+#pragma pop_macro("__global__")
+}
+namespace nochk { // the CuAD adjoint without its run-time checks (strip_checks.py), to measure their cost
+#include "srhd_b_nocheck.cuh"
+}
+#endif
 extern __device__ int enzyme_dup, enzyme_const;
 template <class... A> __device__ void __enzyme_autodiff(void *, A...);
 
@@ -36,6 +48,17 @@ __global__ void enzyme_c2p_b(int solver, const double *U, double *Ub, double *P,
     __enzyme_autodiff((void *)dev::c2p_newton_fixed, enzyme_dup, U, Ub, enzyme_dup, P, Pb, enzyme_dup, g, gb,
                       enzyme_const, n);
 }
+#ifdef WITH_ABLATION
+__global__ void enzyme_c2p_b_restrict(int solver, const double *U, double *Ub, double *P, double *Pb, const double *g,
+                                      double *gb, int n) {
+  if (solver == 0)
+    __enzyme_autodiff((void *)devr::c2p_newton, enzyme_dup, U, Ub, enzyme_dup, P, Pb, enzyme_dup, g, gb,
+                      enzyme_const, n);
+  else
+    __enzyme_autodiff((void *)devr::c2p_bisect, enzyme_dup, U, Ub, enzyme_dup, P, Pb, enzyme_dup, g, gb,
+                      enzyme_const, n);
+}
+#endif
 // solver: 0 Newton with break, 1 bisection, 2 Newton with a fixed iteration count
 static void primal(int s, int gs, const double *U, double *P, const double *g, int n) {
   if (s == 0) c2p_newton<<<gs, 256>>>(U, P, g, n);
@@ -48,7 +71,9 @@ static void cuad_b(int s, int gs, const double *U, double *Ub, double *P, double
   else c2p_newton_fixed_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
 }
 
-// tool: 0 primal, 1 CuAD adjoint, 2 Enzyme adjoint, 3 hand-written implicit adjoint (Newton primal; solver ignored).
+// tool: 0 primal, 1 CuAD adjoint, 2 Enzyme adjoint, 3 hand-written implicit adjoint (Newton primal; solver ignored),
+// with WITH_ABLATION also 4 Enzyme on the __restrict__ kernels and 5 the CuAD adjoint without run-time checks
+// (solvers 0 and 1 only).
 // Pb is copied in for every launch (the adjoints consume it). The device heap (Enzyme's cache) is ENZYME_HEAP_MIB,
 // or the environment variable C2P_HEAP_MIB if set, fixed for the process at the first call.
 extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam, const double *Pbh, double *Ubh,
@@ -72,6 +97,10 @@ extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam
   else if (tool == 1)
     CK(cudaFuncGetAttributes(&at, solver == 0 ? c2p_newton_b : solver == 1 ? c2p_bisect_b : c2p_newton_fixed_b));
   else if (tool == 2) CK(cudaFuncGetAttributes(&at, enzyme_c2p_b));
+#ifdef WITH_ABLATION
+  else if (tool == 4) CK(cudaFuncGetAttributes(&at, enzyme_c2p_b_restrict));
+  else if (tool == 5) CK(cudaFuncGetAttributes(&at, solver == 0 ? nochk::c2p_newton_b : nochk::c2p_bisect_b));
+#endif
   else CK(cudaFuncGetAttributes(&at, c2p_manual_b));
   *regs = at.numRegs; *local = (int)at.localSizeBytes;
   CK(cudaMalloc(&U, sz)); CK(cudaMalloc(&Ub, sz)); CK(cudaMalloc(&P, sz)); CK(cudaMalloc(&Pb, sz));
@@ -86,6 +115,13 @@ extern "C" int c2p_gpu(int tool, int solver, int n, const double *Uh, double gam
     if (tool == 0) primal(solver, gs, U, P, g, n);
     else if (tool == 1) cuad_b(solver, gs, U, Ub, P, Pb, g, gb, n);
     else if (tool == 2) enzyme_c2p_b<<<gs, 256>>>(solver, U, Ub, P, Pb, g, gb, n);
+#ifdef WITH_ABLATION
+    else if (tool == 4) enzyme_c2p_b_restrict<<<gs, 256>>>(solver, U, Ub, P, Pb, g, gb, n);
+    else if (tool == 5) {
+      if (solver == 0) nochk::c2p_newton_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
+      else nochk::c2p_bisect_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
+    }
+#endif
     else c2p_manual_b<<<gs, 256>>>(U, Ub, P, Pb, g, gb, n);
     CK(cudaGetLastError()); CK(cudaEventRecord(b)); CK(cudaEventSynchronize(b));
     if (r >= 0) { float ms; CK(cudaEventElapsedTime(&ms, a, b)); times[r] = ms; }

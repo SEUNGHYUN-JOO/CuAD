@@ -1,0 +1,205 @@
+{
+  "timing": [
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "primal",
+      "status": 0,
+      "registers": 52,
+      "local_bytes": 0,
+      "dot_test_rel_error": null,
+      "median_ms": 1.5475839972496033,
+      "min_ms": 1.5310399532318115,
+      "max_ms": 2.276063919067383,
+      "run_medians_ms": [
+        1.5489280223846436,
+        1.5446720123291016,
+        1.5483520030975342
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "cuad",
+      "status": 0,
+      "registers": 114,
+      "local_bytes": 0,
+      "dot_test_rel_error": 4.385793680240907e-10,
+      "median_ms": 2.8488160371780396,
+      "min_ms": 2.836639881134033,
+      "max_ms": 3.9454400539398193,
+      "run_medians_ms": [
+        2.853327989578247,
+        2.852496027946472,
+        2.8479199409484863
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "cuad_without_checks",
+      "status": 0,
+      "registers": 114,
+      "local_bytes": 0,
+      "dot_test_rel_error": 4.385793680240907e-10,
+      "median_ms": 2.830575942993164,
+      "min_ms": 2.80185604095459,
+      "max_ms": 3.910815954208374,
+      "run_medians_ms": [
+        2.834944009780884,
+        2.837648034095764,
+        2.8222559690475464
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "hand_written",
+      "status": 0,
+      "registers": 64,
+      "local_bytes": 0,
+      "dot_test_rel_error": 4.3858007915104e-10,
+      "median_ms": 1.9794560074806213,
+      "min_ms": 1.9529919624328613,
+      "max_ms": 2.286815881729126,
+      "run_medians_ms": [
+        1.9806079864501953,
+        1.9851199984550476,
+        1.9728959798812866
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "enzyme",
+      "status": 0,
+      "registers": 128,
+      "local_bytes": 0,
+      "dot_test_rel_error": 4.3857972358756534e-10,
+      "median_ms": 2308.3414306640625,
+      "min_ms": 2239.83837890625,
+      "max_ms": 2376.57958984375,
+      "run_medians_ms": [
+        2289.1787109375,
+        2321.9796142578125,
+        2308.3809814453125
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "enzyme_restrict",
+      "status": 0,
+      "registers": 122,
+      "local_bytes": 0,
+      "dot_test_rel_error": 4.3857972358756534e-10,
+      "median_ms": 1075.9775390625,
+      "min_ms": 1000.5537719726562,
+      "max_ms": 1153.1514892578125,
+      "run_medians_ms": [
+        1080.9266967773438,
+        1068.2840576171875,
+        1077.1860961914062
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "primal",
+      "status": 0,
+      "registers": 48,
+      "local_bytes": 0,
+      "dot_test_rel_error": null,
+      "median_ms": 7.9720799922943115,
+      "min_ms": 7.94217586517334,
+      "max_ms": 9.084159851074219,
+      "run_medians_ms": [
+        8.079631805419922,
+        8.230767726898193,
+        7.950576066970825
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "cuad",
+      "status": 0,
+      "registers": 92,
+      "local_bytes": 0,
+      "dot_test_rel_error": 5.80804224457322e-10,
+      "median_ms": 9.186863899230957,
+      "min_ms": 8.690688133239746,
+      "max_ms": 10.183135986328125,
+      "run_medians_ms": [
+        9.314800262451172,
+        8.932960033416748,
+        9.443887710571289
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "cuad_without_checks",
+      "status": 0,
+      "registers": 94,
+      "local_bytes": 0,
+      "dot_test_rel_error": 5.80804224457322e-10,
+      "median_ms": 9.154655933380127,
+      "min_ms": 8.66147232055664,
+      "max_ms": 9.939423561096191,
+      "run_medians_ms": [
+        9.154655933380127,
+        8.891247749328613,
+        9.494160175323486
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "enzyme",
+      "status": 0,
+      "registers": 128,
+      "local_bytes": 0,
+      "dot_test_rel_error": 1.0126295047951297,
+      "median_ms": 6180.475341796875,
+      "min_ms": 6062.091796875,
+      "max_ms": 6455.275390625,
+      "run_medians_ms": [
+        6199.9873046875,
+        6207.78369140625,
+        6115.544677734375
+      ]
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "enzyme_restrict",
+      "status": 0,
+      "registers": 122,
+      "local_bytes": 0,
+      "dot_test_rel_error": 1.0126295047951297,
+      "median_ms": 4036.9466552734375,
+      "min_ms": 3920.477783203125,
+      "max_ms": 4284.7724609375,
+      "run_medians_ms": [
+        4010.021484375,
+        4177.558837890625,
+        3966.1572265625
+      ]
+    }
+  ],
+  "heap": [
+    {
+      "n": 1048576,
+      "c2p": "newton",
+      "tool": "enzyme_restrict",
+      "min_heap_mib_power_of_two": 16
+    },
+    {
+      "n": 1048576,
+      "c2p": "bisection",
+      "tool": "enzyme_restrict",
+      "min_heap_mib_power_of_two": 128
+    }
+  ]
+}

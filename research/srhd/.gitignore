@@ -17,3 +17,5 @@ out/inverse-density-256-1-cuad.*
 out/inverse-density-256-1-enzyme.*
 out/inverse-density-256-1-cuad-noise0.*
 out/inverse-density-256-1-enzyme-noise0.*
+out/check_reliability
+out/srhd_restrict.cu
