@@ -134,9 +134,6 @@ if __name__ == '__main__' or __name__ == 'make_figures':
         me = 1 if s == 'newton' else 5   # markers on every fifth iterate where K runs to 60
         ax.semilogy(K, clip([x['value_error'] for x in r]), '-', color=C['value'], lw=1.0,
                     label=r'value error $|t_K-t^\ast|/t^\ast$')
-        if s != 'bisection':
-            ax.semilogy(K, clip([x['cuad_tangent_unrolled'] for x in r]), 's-', color=C['tangent'], lw=1.0, ms=3.4,
-                        markevery=me, label='CuAD tangent of the iterations')
         ax.semilogy(K, clip([x['enzyme_unrolled'] for x in r]), 'D-', color=C['enzyme'], lw=1.0, ms=3.2,
                     markevery=me, label='Enzyme reverse of the iterations')
         ax.semilogy(K, clip([x['cuad_implicit'] for x in r]), 'o-', color=C['cuad'], markevery=me,

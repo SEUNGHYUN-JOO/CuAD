@@ -27,15 +27,15 @@ die() { echo "FAILED: $*"; exit 1; }
 step "build CuAD and generate derivatives"
 ./build.sh > $O/build.log 2>&1 || die "CuAD build"
 ./cuad -r $E/srhd.cu > $E/srhd_b.cuh || die srhd_b
-./cuad --allow-unsupported $E/srhd.cu > $E/srhd_d.cuh 2> /dev/null   # the bisection tangent is rejected and unused
+./cuad $E/srhd.cu > $E/srhd_d.cuh || die srhd_d
 ./cuad -r $E/srhd2d.cu > $E/srhd2d_b.cuh || die srhd2d_b
-./cuad --allow-unsupported $E/srhd2d.cu > $E/srhd2d_d.cuh 2> /dev/null
+./cuad $E/srhd2d.cu > $E/srhd2d_d.cuh || die srhd2d_d
 ./cuad -r $E/cooling.cu > $E/cooling_b.cuh || die cooling_b
 ./cuad $E/cooling.cu > $E/cooling_d.cuh || die cooling_d
 ./cuad -r $S/c2p_fixed.cu > $O/c2p_fixed_b.cuh || die c2p_fixed_b
 ./cuad -r $S/c2p_variants.cu > $O/c2p_variants_b.cuh || die c2p_variants_b
 ./cuad -r $S/sweep_kernels.cu > $O/sweep_b.cuh || die sweep_b
-./cuad --allow-unsupported $S/sweep_kernels.cu > $O/sweep_d.cuh 2> /dev/null
+./cuad $S/sweep_kernels.cu > $O/sweep_d.cuh || die sweep_d
 
 step "host builds"
 HF="-O2 -std=c++17 -shared -fPIC -Itest -I$E"
@@ -46,7 +46,7 @@ g++ $HF -I$S -I$O $S/c2p_variants_host.cpp -o $O/c2p_variants_cuad.so || die c2p
 g++ -O2 -std=c++17 -Itest -I$E $S/dot2d_kernels.cpp -o $O/dot2d || die dot2d
 "$CL" -std=c++17 -O2 -fno-fast-math -ffp-contract=off -fPIC -shared $ENZ -I$E $S/enzyme_srhd_host.cpp -o $O/enzyme_srhd_host.so || die enzyme_host
 "$CL" -std=c++17 -O2 -fno-fast-math -ffp-contract=off -fPIC -shared -DWITH_ENZYME $ENZ -I$E -I$S $S/c2p_variants_host.cpp -o $O/c2p_variants_enzyme.so || die enzyme_variants
-"$CL" -std=c++17 -O2 -fno-fast-math -ffp-contract=off $ENZ -Itest -I$S -I$O -DCUAD_SOLVE_TOL=1e300 $S/tolerance_sweep.cpp -o $O/tolerance_sweep || die sweep
+"$CL" -std=c++17 -O2 -fno-fast-math -ffp-contract=off $ENZ -Itest -I$S -I$O -DCUAD_SOLVE_TOL=1e300 -DCUAD_SOLVE_AGREE=1e300 $S/tolerance_sweep.cpp -o $O/tolerance_sweep || die sweep
 if [ -n "$CLADINC" ]; then
   "$CL" -std=c++17 -O2 -fPIC -shared -fplugin="$COMPARATORS/clad-build/lib/clad.so" -I"$CLADINC" -I"$COMPARATORS/clad-build/include" -I$E $S/clad_c2p_host.cpp -o $O/clad_c2p_host.so || die clad_host
   "$CL" -std=c++17 -O2 -fplugin="$COMPARATORS/clad-build/lib/clad.so" -I"$CLADINC" -I"$COMPARATORS/clad-build/include" $S/clad_newton_min.cpp -o $O/clad_newton_min || die clad_min
@@ -58,7 +58,6 @@ GF="-std=c++17 -O3 -fno-fast-math -ffp-contract=off $CUDA -fPIC -shared -Itest -
 "$CL" $GF $S/srhd2d_gpu.cu -o $O/srhd2d_gpu.so || die srhd2d_gpu
 "$CL" $GF -I$S -I$O $ENZ $S/c2p_gpu_compare.cu -o $O/c2p_gpu_compare.so || die c2p_gpu_compare
 # cost breakdown: the CuAD adjoint without its run-time checks, Enzyme on kernels with __restrict__ pointers
-$PY $S/strip_checks.py $E/srhd_b.cuh $O/srhd_b_nocheck.cuh > /dev/null || die strip_checks
 sed -E 's/((const )?(double|int) )\*([A-Za-z_][A-Za-z0-9_]*)([,)])/\1*__restrict__ \4\5/g' $E/srhd.cu > $O/srhd_restrict.cu
 "$CL" $GF -DWITH_ABLATION -I$S -I$O $ENZ $S/c2p_gpu_compare.cu -o $O/c2p_gpu_ablation.so || die c2p_gpu_ablation
 nvidia-smi --query-gpu=name,driver_version,utilization.gpu,memory.used --format=csv,noheader | tee $O/gpu-env.txt
@@ -88,9 +87,6 @@ $PY $S/check2d.py || die check2d
 bash $S/run_reproduction.sh || die reproduction                                # Table VI, Fig. 8
 $PY $S/inverse_density.py 512 1 cuad 0.01 1e-6 0 > /dev/null || die inverse_noise
 $PY $S/inverse_density.py 512 1 enzyme 0.01 1e-6 0 > /dev/null || die inverse_noise_enzyme
-for r in 2 4; do for tool in cuad enzyme; do                                     # observations from a finer grid
-  $PY $S/inverse_density.py 256 1 $tool 0 1e-3 0 $r > /dev/null || die crossgrid
-done; done
 $PY $S/inverse_density2d.py 64 1 0 || die inverse2d                            # Fig. 9
 $PY $S/inverse_density2d.py 64 1 0.01 || die inverse2d_noise
 

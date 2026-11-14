@@ -28,19 +28,130 @@ __global__ void cool_implicit_d(const double * P, const double * P_d, double * P
     double x_d = p_d;
     double x = p;
     for (int it = 0; it < 60; ++it) {
-      double q_d = (((al))*(pow(x / rho, (al) - 1)))*(((x_d)*(rho) - ((x)*(rho_d)))/((rho)*(rho))) + (pow(x / rho, al)*log(x / rho))*(al_d);
       double q = pow(x / rho, al);
-      double r_d = x_d - (p_d) + (c_d)*(q) + (c)*(q_d);
       double r = x - p + c * q;
-      double dr_d = ((((c_d)*(al) + (c)*(al_d))*(q) + (c * al)*(q_d))*(x) - ((c * al * q)*(x_d)))/((x)*(x));
       double dr = 1.0 + c * al * q / x;
-      double dx_d = ((r_d)*(dr) - ((r)*(dr_d)))/((dr)*(dr));
       double dx = r / dr;
-      x_d = ((x - dx) >= (floor) ? (x_d - (dx_d)) : (floor_d));
       x = fmax(x - dx, floor);
-      if (fabs(dx) <= 1e-14 * x) {
-        break;
+      if (fabs(dx) <= 1e-14 * x) break;
+    }
+    { // cuad: implicit tangent of the convergence loop at line 15: (I - G_x) x' = G_p p' solved directly
+      double _cuad_x0[1] = {(double)x}, _cuad_r0[1], _cuad_J0[1][1], _cuad_B0[1], _cuad_M0[1][1], _cuad_dd0[1], _cuad_w0[1], _cuad_v0[1];
+      if (CUAD_SOLVE_CHECK) {
+        double q = pow(x / rho, al);
+        double r = x - p + c * q;
+        double dr = 1.0 + c * al * q / x;
+        double dx = r / dr;
+        x = fmax(x - dx, floor);
+        _cuad_r0[0] = (double)x - _cuad_x0[0];
       }
+      x = (double)_cuad_x0[0];
+      {
+        double x = (double)_cuad_x0[0];
+        double x_d = 1;
+        double rho_d = 0;
+        double p_d = 0;
+        double al_d = 0;
+        double c_d = 0;
+        double floor_d = 0;
+        double q_d = (((al))*(pow(x / rho, (al) - 1)))*(((x_d)*(rho) - ((x)*(rho_d)))/((rho)*(rho))) + (pow(x / rho, al)*log(x / rho))*(al_d);
+        double q = pow(x / rho, al);
+        double r_d = x_d - (p_d) + (c_d)*(q) + (c)*(q_d);
+        double r = x - p + c * q;
+        double dr_d = ((((c_d)*(al) + (c)*(al_d))*(q) + (c * al)*(q_d))*(x) - ((c * al * q)*(x_d)))/((x)*(x));
+        double dr = 1.0 + c * al * q / x;
+        double dx_d = ((r_d)*(dr) - ((r)*(dr_d)))/((dr)*(dr));
+        double dx = r / dr;
+        x_d = ((x - dx) >= (floor) ? (x_d - (dx_d)) : (floor_d));
+        x = fmax(x - dx, floor);
+        _cuad_J0[0][0] = x_d;
+      }
+      {
+        double x = (double)_cuad_x0[0];
+        double x_d = 0;
+        double q_d = (((al))*(pow(x / rho, (al) - 1)))*(((x_d)*(rho) - ((x)*(rho_d)))/((rho)*(rho))) + (pow(x / rho, al)*log(x / rho))*(al_d);
+        double q = pow(x / rho, al);
+        double r_d = x_d - (p_d) + (c_d)*(q) + (c)*(q_d);
+        double r = x - p + c * q;
+        double dr_d = ((((c_d)*(al) + (c)*(al_d))*(q) + (c * al)*(q_d))*(x) - ((c * al * q)*(x_d)))/((x)*(x));
+        double dr = 1.0 + c * al * q / x;
+        double dx_d = ((r_d)*(dr) - ((r)*(dr_d)))/((dr)*(dr));
+        double dx = r / dr;
+        x_d = ((x - dx) >= (floor) ? (x_d - (dx_d)) : (floor_d));
+        x = fmax(x - dx, floor);
+        _cuad_B0[0] = x_d;
+      }
+      if (CUAD_SOLVE_CHECK) {
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_dd0[_cuad_i] = _cuad_r0[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M0[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J0[_cuad_i][_cuad_k];
+      }
+      if (!cuad_lsolve(_cuad_M0, _cuad_dd0)) cuad_solve_fail();
+      {
+        double _cuad_dn = 0, _cuad_xn = 0;
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) { _cuad_dn = fmax(_cuad_dn, fabs(_cuad_dd0[_cuad_k])); _cuad_xn = fmax(_cuad_xn, fabs(_cuad_x0[_cuad_k])); }
+        if (_cuad_dn > CUAD_SOLVE_TOL * _cuad_xn + CUAD_SOLVE_ATOL) cuad_solve_fail();
+      }
+      }
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_w0[_cuad_i] = _cuad_B0[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M0[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J0[_cuad_i][_cuad_k];
+      }
+      if (!cuad_lsolve(_cuad_M0, _cuad_w0)) cuad_solve_fail();
+      double _cuad_bn0 = 0;
+      for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_bn0 = fmax(_cuad_bn0, fmax(fabs(_cuad_w0[_cuad_k]), fabs(_cuad_B0[_cuad_k])));
+      double _cuad_jm0 = 0;
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_jm0 = fmax(_cuad_jm0, fabs(_cuad_J0[_cuad_i][_cuad_k]));
+      if (CUAD_SOLVE_CHECK && (_cuad_jm0 > 0.25 || !(_cuad_bn0 < 1e300))) {
+      double _cuad_y0[1];
+      for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_y0[_cuad_k] = _cuad_x0[_cuad_k] + _cuad_dd0[_cuad_k] + copysign(4.440892098500626e-16 * fabs(_cuad_x0[_cuad_k]), _cuad_dd0[_cuad_k]);
+      {
+        double x = (double)_cuad_y0[0];
+        double x_d = 1;
+        double rho_d = 0;
+        double p_d = 0;
+        double al_d = 0;
+        double c_d = 0;
+        double floor_d = 0;
+        double q_d = (((al))*(pow(x / rho, (al) - 1)))*(((x_d)*(rho) - ((x)*(rho_d)))/((rho)*(rho))) + (pow(x / rho, al)*log(x / rho))*(al_d);
+        double q = pow(x / rho, al);
+        double r_d = x_d - (p_d) + (c_d)*(q) + (c)*(q_d);
+        double r = x - p + c * q;
+        double dr_d = ((((c_d)*(al) + (c)*(al_d))*(q) + (c * al)*(q_d))*(x) - ((c * al * q)*(x_d)))/((x)*(x));
+        double dr = 1.0 + c * al * q / x;
+        double dx_d = ((r_d)*(dr) - ((r)*(dr_d)))/((dr)*(dr));
+        double dx = r / dr;
+        x_d = ((x - dx) >= (floor) ? (x_d - (dx_d)) : (floor_d));
+        x = fmax(x - dx, floor);
+        _cuad_J0[0][0] = x_d;
+      }
+      {
+        double x = (double)_cuad_y0[0];
+        double x_d = 0;
+        double q_d = (((al))*(pow(x / rho, (al) - 1)))*(((x_d)*(rho) - ((x)*(rho_d)))/((rho)*(rho))) + (pow(x / rho, al)*log(x / rho))*(al_d);
+        double q = pow(x / rho, al);
+        double r_d = x_d - (p_d) + (c_d)*(q) + (c)*(q_d);
+        double r = x - p + c * q;
+        double dr_d = ((((c_d)*(al) + (c)*(al_d))*(q) + (c * al)*(q_d))*(x) - ((c * al * q)*(x_d)))/((x)*(x));
+        double dr = 1.0 + c * al * q / x;
+        double dx_d = ((r_d)*(dr) - ((r)*(dr_d)))/((dr)*(dr));
+        double dx = r / dr;
+        x_d = ((x - dx) >= (floor) ? (x_d - (dx_d)) : (floor_d));
+        x = fmax(x - dx, floor);
+        _cuad_B0[0] = x_d;
+      }
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_v0[_cuad_i] = _cuad_B0[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M0[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J0[_cuad_i][_cuad_k];
+      }
+      if (!cuad_lsolve(_cuad_M0, _cuad_v0)) cuad_solve_fail();
+      {
+        double _cuad_wd = 0;
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_wd = fmax(_cuad_wd, fabs(_cuad_w0[_cuad_k] - _cuad_v0[_cuad_k]));
+        if (!(_cuad_wd <= CUAD_SOLVE_AGREE * _cuad_bn0) || !(_cuad_bn0 < 1e300)) cuad_solve_fail();
+      }
+      }
+      x_d = (double)_cuad_w0[0];
     }
     Pn_d[i] = rho_d;
     Pn[i] = rho;

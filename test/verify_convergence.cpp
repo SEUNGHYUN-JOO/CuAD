@@ -1,6 +1,6 @@
 // Host check of convergence loops (test/cases/convergence.cu, test/reverse_only/bracketing.cu):
-// the implicit adjoint against central finite differences, and the tangent (forward mode) of the
-// smooth loops. Each kernel maps x[0..n) to y[0].
+// the implicit adjoint and the implicit tangent (forward mode) against central finite differences, for the
+// smooth and the bracketing loops. Each kernel maps x[0..n) to y[0].
 #include <cmath>
 #include <cstdio>
 
@@ -16,6 +16,7 @@
 #include "out/convergence_d.cuh"
 #include "reverse_only/bracketing.cu"
 #include "out/bracketing_b.cuh"
+#include "out/bracketing_d.cuh"
 
 typedef void (*Fn)(const double *, double *, int);
 typedef void (*Adj)(const double *, double *, double *, double *, int);
@@ -50,8 +51,8 @@ int main() {
   fails += check("fixed_point", fixed_point, fixed_point_b, fixed_point_d);
   fails += check("newton_system", newton_system, newton_system_b, newton_system_d);
   fails += check("solve_in_loop", solve_in_loop, solve_in_loop_b, solve_in_loop_d);
-  fails += check("bisect_root", bisect_root, bisect_root_b, nullptr);
-  fails += check("bisect_moving_bracket", bisect_moving_bracket, bisect_moving_bracket_b, nullptr);
+  fails += check("bisect_root", bisect_root, bisect_root_b, bisect_root_d);
+  fails += check("bisect_moving_bracket", bisect_moving_bracket, bisect_moving_bracket_b, bisect_moving_bracket_d);
   std::printf("RESULT: %s\n", fails ? "FAILED" : "all passed");
   return fails ? 1 : 0;
 }

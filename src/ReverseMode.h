@@ -1376,19 +1376,28 @@ private:
   }
 
   // ---------------- convergence loops: implicit adjoint ----------------
-  // A counted loop that leaves with `if (c) break;` and iterates floating locals to convergence (a root
-  // solve, a fixed-point iteration) is not reversed iteration by iteration. Its result is taken to be the
-  // converged point, which depends on the inputs only through the equation that the loop solves:
-  //  - smooth update (some state assignment depends on the inputs): x* = G(x*, p). The adjoint
-  //    l = s + G_x^T l is iterated with the reverse of one iteration, then p_b += G_p^T l (Christianson);
+  // A `for`, `while` or `do` loop that leaves through `if (c) break;` or through a condition on what it iterates, and
+  // iterates floating locals (scalars or local arrays) to convergence (a root solve, a fixed-point iteration), is not
+  // reversed iteration by iteration. Its result is taken to be the converged point, which depends on the inputs only
+  // through the equation that the loop solves:
+  //  - smooth update (some state assignment depends on the inputs): x* = G(x*, p). G_x and G_p come from one reverse
+  //    sweep of one iteration per state component; (I - G_x)^T l = s is solved directly and p_b += G_p^T l;
   //  - bracketing update (the inputs reach the state only through the branch that decides which bound the
   //    trial point m replaces): differentiating the iterations gives a derivative through the initial
-  //    bracket only, which is wrong. x* is the root of the branch condition r(m, p) and p_b -= r_p s / r_m.
+  //    bracket only, which is wrong. x* is the root of the branch condition r(m, p) and p_b -= r_p s / r_m;
+  //  - several iterated variables without a smooth map (secant, regula falsi, Brent): the residual found in the loop.
+  // The exit state must lie within CUAD_SOLVE_TOL of a solution, and the derivative must not change across the
+  // interval in which the solution is known (CUAD_SOLVE_AGREE): a double root or a degenerate fixed point traps. The
+  // second evaluation is skipped for a smooth update whose G_x is negligible (Newton's method at a simple root).
   // The forward sweep runs the loop as written and stores nothing per iteration.
+public:
   struct SolveInfo {
     bool ok = false, bracket = false;
     std::string why;                         // why a loop with `break` is not a convergence loop
-    std::vector<const Stmt *> iter;          // the body without its `if (c) break;` statements
+    std::vector<const Stmt *> iter;          // the body without its exit tests and counter updates
+    std::vector<const Expr *> exitConds;     // the exit tests: `if (c) break;` conditions and the loop condition
+    struct Comp { std::string x, b, d, T; }; // one floating state component: value, adjoint, tangent, type
+    std::vector<Comp> comps;
     std::vector<const VarDecl *> state, params;
     const IfStmt *sel = nullptr;             // bracketing: the branch that moves a bound
     const VarDecl *trial = nullptr;          // bracketing: the trial point that both arms assign
@@ -1405,7 +1414,39 @@ private:
     bool residual = false;
     std::vector<Residual> res;
   };
-  mutable std::map<const ForStmt *, SolveInfo> solve_;
+  // the analysis of convergence loops for the forward mode, which shares it (Activity of the function FD)
+  void prepareSolveAnalysis(const FunctionDecl *FD) {
+    Act = Activity();
+    Act.run(FD);
+    curBody_ = FD->getBody();
+  }
+  const SolveInfo &convergenceLoop(const Stmt *loop) const { return solveInfo(loop); }
+  static const Stmt *loopBody(const Stmt *s) {
+    if (const auto *f = dyn_cast<ForStmt>(s))
+      return f->getBody();
+    if (const auto *w = dyn_cast<WhileStmt>(s))
+      return w->getBody();
+    if (const auto *d = dyn_cast<DoStmt>(s))
+      return d->getBody();
+    return nullptr;
+  }
+  static const Expr *loopCond(const Stmt *s) {
+    if (const auto *f = dyn_cast<ForStmt>(s))
+      return f->getCond();
+    if (const auto *w = dyn_cast<WhileStmt>(s))
+      return w->getCond();
+    if (const auto *d = dyn_cast<DoStmt>(s))
+      return d->getCond();
+    return nullptr;
+  }
+  static const Stmt *loopInit(const Stmt *s) {
+    if (const auto *f = dyn_cast<ForStmt>(s))
+      return f->getInit();
+    return nullptr;
+  }
+
+private:
+  mutable std::map<const Stmt *, SolveInfo> solve_;
 
   static bool isBreakIf(const Stmt *s) {
     const auto *is = dyn_cast<IfStmt>(s);
@@ -1448,42 +1489,120 @@ private:
     return t->isRealFloatingType();
   }
 
-  const SolveInfo &solveInfo(const ForStmt *fs) const {
-    auto it = solve_.find(fs);
+  // floating locals declared outside the loop that its body assigns (the candidates for its state)
+  static void outerFloatAssigned(const Stmt *s, const std::set<const VarDecl *> &inner, std::set<const VarDecl *> &out) {
+    if (!s)
+      return;
+    const Expr *lhs = nullptr;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp())
+        lhs = bo->getLHS();
+    if (const auto *uo = dyn_cast<UnaryOperator>(s))
+      if (uo->isIncrementDecrementOp())
+        lhs = uo->getSubExpr();
+    if (lhs) {
+      const Expr *root = lhs->IgnoreParenImpCasts();
+      while (const auto *as = dyn_cast<ArraySubscriptExpr>(root))
+        root = as->getBase()->IgnoreParenImpCasts();
+      if (const auto *d = dyn_cast<DeclRefExpr>(root))
+        if (const auto *vd = dyn_cast<VarDecl>(d->getDecl()))
+          if (!inner.count(vd) && vd->getType()->getBaseElementTypeUnsafe()->isRealFloatingType())
+            out.insert(vd);
+    }
+    for (const Stmt *c : s->children())
+      outerFloatAssigned(c, inner, out);
+  }
+  // A top-level statement that only counts iterations: ++it, it++, it += 1, it = it + 1 on an integer variable.
+  static const VarDecl *counterUpdate(const Stmt *s) {
+    const Expr *lhs = nullptr;
+    if (const auto *uo = dyn_cast<UnaryOperator>(s))
+      if (uo->isIncrementDecrementOp())
+        lhs = uo->getSubExpr();
+    if (const auto *bo = dyn_cast<BinaryOperator>(s))
+      if (bo->isAssignmentOp() && !bo->getRHS()->getType()->isRealFloatingType()) {
+        std::set<const VarDecl *> r;
+        solveRefs(bo->getRHS(), r);
+        bool floats = false;
+        for (const VarDecl *v : r)
+          floats |= v->getType()->isRealFloatingType();
+        if (!floats)
+          lhs = bo->getLHS();
+      }
+    if (!lhs)
+      return nullptr;
+    const auto *d = dyn_cast<DeclRefExpr>(lhs->IgnoreParenImpCasts());
+    const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr;
+    return vd && vd->getType()->isIntegerType() ? vd : nullptr;
+  }
+
+  const SolveInfo &solveInfo(const Stmt *loop) const {
+    auto it = solve_.find(loop);
     if (it != solve_.end())
       return it->second;
-    SolveInfo &si = solve_[fs];
-    if (!fs->getBody() || !containsBreak(fs->getBody()) || !hasActive(fs->getBody()))
+    SolveInfo &si = solve_[loop];
+    const Stmt *body = loopBody(loop);
+    if (!body || !hasActive(body))
       return si; // not a convergence loop (why stays empty)
-    si.why = analyseSolve(fs, si);
+    // a convergence loop leaves through `if (c) break;` or through a loop condition that tests a floating variable
+    // the body iterates; a counted `for` loop is neither
+    std::set<const VarDecl *> inner, outer;
+    solveDecls(body, inner);
+    solveDecls(loopInit(loop), inner);
+    outerFloatAssigned(body, inner, outer);
+    const Expr *cond = loopCond(loop);
+    bool condTests = cond && mentionsAny(cond, outer);
+    if (isa<ForStmt>(loop) && !containsBreak(body) && !condTests)
+      return si;
+    si.why = analyseSolve(loop, si);
     si.ok = si.why.empty();
     return si;
   }
 
-  std::string analyseSolve(const ForStmt *fs, SolveInfo &si) const {
+  std::string analyseSolve(const Stmt *loop, SolveInfo &si) const {
+    const Stmt *body = loopBody(loop);
     std::vector<const Stmt *> top;
-    if (const auto *cs = dyn_cast<CompoundStmt>(fs->getBody()))
+    if (const auto *cs = dyn_cast<CompoundStmt>(body))
       top.assign(cs->body_begin(), cs->body_end());
     else
-      top.push_back(fs->getBody());
+      top.push_back(body);
     std::set<const VarDecl *> inner;
-    solveDecls(fs->getBody(), inner);
-    solveDecls(fs->getInit(), inner);
+    solveDecls(body, inner);
+    solveDecls(loopInit(loop), inner);
     bool exits = false;
     for (const Stmt *s0 : top) {
       const Stmt *s = unwrapAttr(s0);
       if (isBreakIf(s)) {
         exits = true;
+        si.exitConds.push_back(cast<IfStmt>(s)->getCond());
         continue;
       }
       if (containsBreak(s))
         return "its `break` is not a top-level `if (c) break;`";
+      if (const VarDecl *c = counterUpdate(s))
+        if (!inner.count(c))
+          continue; // an iteration counter declared outside the loop: not part of the iteration map
       si.iter.push_back(s);
     }
+    if (const Expr *c = loopCond(loop)) {
+      std::set<const VarDecl *> outer;
+      outerFloatAssigned(body, inner, outer);
+      if (mentionsAny(c, outer))
+        exits = true;
+      si.exitConds.push_back(c);
+    }
     if (!exits)
-      return "it has no top-level `if (c) break;`";
+      return "it has no top-level `if (c) break;` and its condition tests no iterated variable";
     std::string bad;
     std::set<const VarDecl *> assigned;
+    std::set<const VarDecl *> stateArrays; // local floating arrays declared before the loop that it writes
+    {
+      std::set<const VarDecl *> w;
+      for (const Stmt *s : si.iter)
+        outerFloatAssigned(s, inner, w);
+      for (const VarDecl *v : w)
+        if (!isFloatScalar(v) && v->isLocalVarDecl() && Ctx.getAsConstantArrayType(v->getType()))
+          stateArrays.insert(v);
+    }
     std::function<void(const Stmt *)> walk = [&](const Stmt *s) {
       if (!s || !bad.empty())
         return;
@@ -1500,14 +1619,24 @@ private:
         if (uo->isIncrementDecrementOp())
           lhs = uo->getSubExpr();
       if (lhs) {
-        const auto *d = dyn_cast<DeclRefExpr>(lhs->IgnoreParenImpCasts());
+        const Expr *root = lhs->IgnoreParenImpCasts();
+        bool element = false;
+        while (const auto *as = dyn_cast<ArraySubscriptExpr>(root)) {
+          root = as->getBase()->IgnoreParenImpCasts();
+          element = true;
+        }
+        const auto *d = dyn_cast<DeclRefExpr>(root);
         const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr;
-        if (!vd) {
-          bad = "it writes memory (only scalar locals may change inside the loop)";
+        if (!vd || (element && !localFloatArray(root, Ctx))) {
+          bad = "it writes memory other than its local variables (global or shared memory, or through a pointer)";
+          return;
+        }
+        if (element && inner.count(vd)) {
+          bad = "it writes the local array `" + vd->getNameAsString() + "` declared inside it";
           return;
         }
         if (!inner.count(vd)) {
-          if (!isFloatScalar(vd)) {
+          if (!element && !isFloatScalar(vd)) {
             bad = "it changes the outer non-floating variable `" + vd->getNameAsString() + "`";
             return;
           }
@@ -1515,14 +1644,32 @@ private:
         }
       }
       if (const auto *ce = dyn_cast<CallExpr>(s))
-        if (isUserDiffFn(calleeOf(ce))) {
-          bad = "it calls the user function `" + calleeOf(ce)->getNameAsString() + "`";
-          return;
-        }
+        if (const FunctionDecl *fd = calleeOf(ce))
+          if (isUserDiffFn(fd)) {
+            // a call to a pure function (parameters by value, a floating result) is part of the iteration map
+            bool pure = fd->getReturnType()->isRealFloatingType();
+            for (const ParmVarDecl *p : fd->parameters()) {
+              QualType t = p->getType().getCanonicalType();
+              if (t->isPointerType() || t->isReferenceType() || t->isArrayType())
+                pure = false;
+            }
+            if (!pure) {
+              bad = "it calls the user function `" + fd->getNameAsString() +
+                    "` with pointer or reference parameters or without a floating result";
+              return;
+            }
+          }
       if (const auto *as = dyn_cast<ArraySubscriptExpr>(s))
         if (hasActive(as->getBase())) {
-          bad = "it reads an active array (copy the element into a local before the loop)";
-          return;
+          const Expr *root = as->getBase()->IgnoreParenImpCasts();
+          while (const auto *in = dyn_cast<ArraySubscriptExpr>(root))
+            root = in->getBase()->IgnoreParenImpCasts();
+          const auto *d = dyn_cast<DeclRefExpr>(root);
+          const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr;
+          if (!vd || !stateArrays.count(vd)) {
+            bad = "it reads an active array other than its own state (copy the element into a local before the loop)";
+            return;
+          }
         }
       for (const Stmt *c : s->children())
         walk(c);
@@ -1560,9 +1707,15 @@ private:
       }
       if (const auto *bo = dyn_cast<BinaryOperator>(s))
         if (bo->isAssignmentOp()) {
-          const auto *d = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+          const Expr *root = bo->getLHS()->IgnoreParenImpCasts();
+          bool element = false;
+          while (const auto *as = dyn_cast<ArraySubscriptExpr>(root)) {
+            root = as->getBase()->IgnoreParenImpCasts();
+            element = true;
+          }
+          const auto *d = dyn_cast<DeclRefExpr>(root);
           if (const auto *vd = d ? dyn_cast<VarDecl>(d->getDecl()) : nullptr)
-            if (mentionsAny(bo->getRHS(), dep) || (bo->isCompoundAssignmentOp() && dep.count(vd)))
+            if (mentionsAny(bo->getRHS(), dep) || ((bo->isCompoundAssignmentOp() || element) && dep.count(vd)))
               dep.insert(vd);
           return;
         }
@@ -1576,16 +1729,48 @@ private:
     };
     for (const Stmt *s : si.iter)
       flow(s);
-    bool smooth = false;
-    for (const VarDecl *v : si.state)
+    bool smooth = false, arrays = false;
+    for (const VarDecl *v : si.state) {
       if (dep.count(v))
         smooth = true;
+      if (!isFloatScalar(v))
+        arrays = true;
+    }
+    // the state components: every scalar and every element of a state array
+    for (const VarDecl *v : si.state) {
+      std::string x = v->getNameAsString();
+      std::string T = tstr(v->getType().getNonReferenceType().getUnqualifiedType());
+      if (isFloatScalar(v)) {
+        si.comps.push_back({x, x + "_b", x + "_d", T});
+        continue;
+      }
+      QualType elem;
+      uint64_t n = arrayCount(v, elem);
+      std::vector<uint64_t> dims;
+      for (QualType qt = v->getType().getCanonicalType(); const auto *cat = Ctx.getAsConstantArrayType(qt);
+           qt = cat->getElementType())
+        dims.push_back(cat->getSize().getZExtValue());
+      for (uint64_t k = 0; k < n; ++k) {
+        std::string idx;
+        uint64_t rem = k, stride = n;
+        for (uint64_t d : dims) {
+          stride /= d;
+          idx += "[" + std::to_string(rem / stride) + "]";
+          rem %= stride;
+        }
+        si.comps.push_back({x + idx, x + "_b" + idx, x + "_d" + idx, tstr(elem)});
+      }
+    }
+    if (si.comps.size() > 16)
+      return "its state has more than 16 floating components";
     if (smooth) {
-      if (si.state.size() > 1)
-        findResiduals(fs, si, inner, dep);
+      if (si.state.size() > 1 && !arrays)
+        findResiduals(loop, si, inner, dep);
       si.residual = !si.res.empty();
       return "";
     }
+    if (arrays)
+      return "its bracketing update iterates an array (bracketing loops need scalar bounds)";
     // bracketing: one if/else whose arms only assign the same trial local to state variables
     si.bracket = true;
     std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), seen;
@@ -1639,7 +1824,7 @@ private:
   // exactly one iterated variable or one trial local that is itself computed from iterated variables alone (the point
   // at which the function is evaluated). Body locals that are reassigned, or values read from other iterations
   // through anything but that one variable, disqualify it.
-  void findResiduals(const ForStmt *fs, SolveInfo &si, const std::set<const VarDecl *> &inner,
+  void findResiduals(const Stmt *, SolveInfo &si, const std::set<const VarDecl *> &inner,
                      const std::set<const VarDecl *> &dep) const {
     std::set<const VarDecl *> stateSet(si.state.begin(), si.state.end()), paramSet(si.params.begin(), si.params.end());
     std::map<const VarDecl *, const DeclStmt *> declOf;
@@ -1789,10 +1974,8 @@ private:
     };
     for (const Stmt *s : si.iter)
       conds(s);
-    if (const auto *body = dyn_cast<CompoundStmt>(fs->getBody()))
-      for (const Stmt *s : body->body())
-        if (isBreakIf(s))
-          solveRefs(cast<IfStmt>(s)->getCond(), tested);
+    for (const Expr *c : si.exitConds)
+      solveRefs(c, tested);
     // the equation a loop solves must steer it: a candidate is kept only if a condition tests it or the update of an
     // iterated variable reads it (directly or through body locals); a value computed beside the iteration and never
     // used by it is not a relation the loop drives to zero, even if it happens to vanish at the exit state
@@ -1835,7 +2018,7 @@ private:
   }
 
   // Adjoint of a multi-state root-finding loop through the residual found at run time (see findResiduals).
-  std::string residualAdjoint(const ForStmt *fs, const SolveInfo &si, int depth) const {
+  std::string residualAdjoint(const Stmt *fs, const SolveInfo &si, int depth) const {
     const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
     const std::string id = std::to_string(tmp_++);
     const std::string line = std::to_string(SM.getSpellingLineNumber(fs->getBeginLoc()));
@@ -1852,7 +2035,7 @@ private:
     const std::string use = "_cuad_use" + id, X = "_cuad_x" + id, RT = "_cuad_rt" + id, V = "_cuad_v" + id,
                       XK = "_cuad_xk" + id, RK = "_cuad_rk" + id, D = "_cuad_d" + id;
     out += i1 + "int " + use + " = -1, " + V + "[" + Ks + "];\n" + i1 + "double " + X + " = 0, " + RT + " = 0, " + XK + "[" +
-           Ks + "], " + RK + "[" + Ks + "], " + D + "[" + Ks + "][" + Ps + "];\n";
+           Ks + "], " + RK + "[" + Ks + "], " + D + "[" + Ks + "][" + Ps + "], _cuad_rv" + id + "[" + Ks + "];\n";
     auto localsOf = [&](const std::vector<const Stmt *> &stmts) {
       std::vector<const VarDecl *> v;
       for (const Stmt *s : stmts)
@@ -1894,7 +2077,8 @@ private:
         o += genPrimal(s, depth + 3);
       for (const Stmt *s : r.slice)
         o += genPrimal(s, depth + 3);
-      out += o + i3 + "_cuad_R = " + prim(r.expr) + ";\n" + i2 + "}\n";
+      out += o + i3 + "_cuad_R = " + prim(r.expr) + ";\n" + i2 + "}\n" + i2 + "_cuad_rv" + id + "[" + kk +
+             "] = _cuad_R;\n";
       // R_t and R_p: the residual's adjoint for the seed 1, with the inputs' adjoints shadowed
       std::string cp;
       for (size_t j = 0; j < si.params.size(); ++j)
@@ -1944,39 +2128,40 @@ private:
       out += i2 + "else cuad_solve_fail();\n";
       out += i2 + x + "_b = 0;\n" + i1 + "}\n";
     }
-    for (size_t k = 0; k < si.res.size(); ++k)
-      out += i1 + "if (_cuad_use" + id + " == " + std::to_string(k) + ") {\n" +
-             pass(si.res[k], "-(_cuad_s" + id + ") / (_cuad_rt" + id + ")", "", false, i2, depth + 2) + i1 + "}\n";
+    for (size_t k = 0; k < si.res.size(); ++k) {
+      const auto &r = si.res[k];
+      const std::string kk = std::to_string(k), t = r.trialVar->getNameAsString(), Tt = T(r.trialVar);
+      out += i1 + "if (_cuad_use" + id + " == " + kk + ") {\n";
+      // conditioning: -R_p / R_t once more at the far end of the interval |R / R_t| in which the root is known
+      out += i2 + "if (CUAD_SOLVE_CHECK) {\n" + i3 + "double _cuad_e[" + Ps + "] = {0};\n";
+      for (const Stmt *s : r.trialDecls)
+        out += genPrimal(s, depth + 3);
+      out += i3 + "const double _cuad_tt = (double)" + t + " + fabs(" + "_cuad_rv" + id + "[" + kk + "] / " + RK + "[" +
+             kk + "]) + 4.440892098500626e-16 * fabs((double)" + t + ");\n";
+      out += i3 + "{\n" + i3 + "  " + Tt + " " + t + " = (" + Tt + ")_cuad_tt;\n";
+      for (const Stmt *s : r.slice)
+        out += genPrimal(s, depth + 4);
+      out += shadowAdj(si.params, i3 + "  ") + i3 + "  " + Tt + " " + t + "_b = 0;\n" +
+             shadowAdj(localsOf(r.slice), i3 + "  ");
+      {
+        std::string o;
+        pushAdj(r.expr, "1", o, i3 + "  ");
+        for (auto it = r.slice.rbegin(); it != r.slice.rend(); ++it)
+          o += reverseStmt(*it, depth + 4);
+        out += o;
+      }
+      for (size_t q = 0; q < si.params.size(); ++q)
+        out += i3 + "  _cuad_e[" + std::to_string(q) + "] = -" + si.params[q]->getNameAsString() + "_b / " + t + "_b;\n";
+      out += i3 + "}\n" + i3 + "double _cuad_en = 0, _cuad_ed = 0;\n" + i3 + "for (int _cuad_q = 0; _cuad_q < " + Ps +
+             "; ++_cuad_q) { _cuad_en = fmax(_cuad_en, fmax(fabs(_cuad_e[_cuad_q]), fabs(" + D + "[" + kk +
+             "][_cuad_q]))); _cuad_ed = fmax(_cuad_ed, fabs(_cuad_e[_cuad_q] - " + D + "[" + kk + "][_cuad_q])); }\n" + i3 +
+             "if (!(_cuad_ed <= CUAD_SOLVE_AGREE * _cuad_en) || !(_cuad_en < 1e300)) cuad_solve_fail();\n" + i2 + "}\n";
+      out += pass(r, "-(_cuad_s" + id + ") / (_cuad_rt" + id + ")", "", false, i2, depth + 2) + i1 + "}\n";
+    }
     noPush_ = saved;
     return out + ind + "}\n";
   }
 
-  // A loop recognized as a convergence loop may still have left through its `break` for another reason (a
-  // threshold, an iteration cap): then its result is not a fixed point and the implicit adjoint would be the
-  // derivative of a different quantity. One more iteration from the exit state must not move it by more than
-  // CUAD_SOLVE_TOL (relative); otherwise trap.
-  std::string fixedPointCheck(const SolveInfo &si, const std::string &id, int depth) const {
-    const std::string ind(depth * 2, ' '), in = ind + "  ";
-    std::string out = ind + "{ // cuad: the loop must have stopped at a fixed point of one iteration\n";
-    for (const VarDecl *v : si.state)
-      out += in + tstr(v->getType().getNonReferenceType().getUnqualifiedType()) + " _cuad_f" + id + "_" +
-             v->getNameAsString() + " = " + v->getNameAsString() + ";\n";
-    bool saved = noPush_;
-    noPush_ = true;
-    out += in + "{\n";
-    for (const Stmt *s : si.iter)
-      out += genPrimal(s, depth + 2);
-    out += in + "}\n";
-    noPush_ = saved;
-    out += in + "double _cuad_fr = 0, _cuad_fs = 0;\n";
-    for (const VarDecl *v : si.state) {
-      std::string x = v->getNameAsString(), f = "_cuad_f" + id + "_" + x;
-      out += in + "_cuad_fr = fmax(_cuad_fr, fabs((double)(" + x + " - " + f + "))); _cuad_fs = fmax(_cuad_fs, fabs((double)" +
-             f + ")); " + x + " = " + f + ";\n";
-    }
-    out += in + "if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs + CUAD_SOLVE_ATOL) cuad_solve_fail();\n" + ind + "}\n";
-    return out;
-  }
 
   // declarations `T x_b = 0;` that hide the given adjoints inside a block
   std::string shadowAdj(const std::vector<const VarDecl *> &vs, const std::string &ind) const {
@@ -1987,7 +2172,37 @@ private:
     return out;
   }
 
-  std::string solveAdjoint(const ForStmt *fs, const SolveInfo &si, int depth) const {
+  // One reverse sweep of one iteration with the seed e_j on the state: row j of G_x into J[j][.], of G_p into P[j][.].
+  std::string jacobianSweep(const SolveInfo &si, size_t j, const std::string &J, const std::string &P,
+                            int depth) const {
+    const std::string in((depth + 1) * 2, ' ');
+    std::string o = std::string(depth * 2, ' ') + "{\n" + shadowAdj(si.params, in);
+    size_t k = 0;
+    for (const VarDecl *v : si.state) {
+      std::string x = v->getNameAsString();
+      if (isFloatScalar(v)) {
+        o += in + tstr(v->getType().getNonReferenceType().getUnqualifiedType()) + " " + x + "_b = " +
+             (k == j ? "1" : "0") + ";\n";
+        ++k;
+        continue;
+      }
+      QualType elem;
+      std::string dims = arrayDims(v->getType(), elem), init;
+      uint64_t n = arrayCount(v, elem);
+      for (uint64_t e = 0; e < n; ++e, ++k)
+        init += std::string(e ? ", " : "") + (k == j ? "1" : "0");
+      o += in + tstr(elem) + " " + x + "_b" + dims + " = {" + init + "};\n";
+    }
+    o += genBlock(si.iter, depth + 1);
+    for (size_t c = 0; c < si.comps.size(); ++c)
+      o += in + J + "[" + std::to_string(j) + "][" + std::to_string(c) + "] = " + si.comps[c].b + ";\n";
+    for (size_t q = 0; q < si.params.size(); ++q)
+      o += in + P + "[" + std::to_string(j) + "][" + std::to_string(q) + "] = " + si.params[q]->getNameAsString() +
+           "_b;\n";
+    return o + std::string(depth * 2, ' ') + "}\n";
+  }
+
+  std::string solveAdjoint(const Stmt *fs, const SolveInfo &si, int depth) const {
     if (si.residual)
       return residualAdjoint(fs, si, depth);
     const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
@@ -1998,41 +2213,97 @@ private:
     noPush_ = false; // one iteration's primal must push what its own reverse pops
     std::string out;
     if (!si.bracket) {
+      // x* = G(x*, p): with J = G_x and P = G_p from one reverse sweep per state component, the distance of the exit
+      // state to the fixed point solves (I - J) d = G(x) - x and the adjoint solves (I - J)^T l = s; the inputs get
+      // P^T l. The same is evaluated once more at x + d: the derivative must not change across the interval in
+      // which the solution is known (a double root, a degenerate fixed point).
+      const size_t K = si.comps.size(), NP = std::max<size_t>(si.params.size(), 1);
+      const std::string Ks = std::to_string(K), Ps = std::to_string(NP);
+      const std::string S = "_cuad_s" + id, X = "_cuad_x" + id, R = "_cuad_r" + id, J = "_cuad_J" + id,
+                        P = "_cuad_P" + id, M = "_cuad_M" + id, D = "_cuad_d" + id, L = "_cuad_l" + id,
+                        G = "_cuad_g" + id, G2 = "_cuad_h" + id;
       out += ind + "{ // cuad: implicit adjoint of the convergence loop at line " + line +
-             ": l = s + G_x^T l over one iteration, then the inputs get G_p^T l\n";
-      for (const VarDecl *v : si.state) {
-        std::string x = v->getNameAsString();
-        out += i1 + T(v) + " _cuad_s" + id + "_" + x + " = " + x + "_b, _cuad_l" + id + "_" + x + " = " + x + "_b;\n";
-        out += i1 + x + "_b = 0;\n";
+             ": (I - G_x)^T l = s solved directly, then the inputs get G_p^T l\n";
+      std::string sInit, xInit;
+      for (size_t k = 0; k < K; ++k) {
+        sInit += std::string(k ? ", " : "") + "(double)" + si.comps[k].b;
+        xInit += std::string(k ? ", " : "") + "(double)" + si.comps[k].x;
       }
-      out += fixedPointCheck(si, id, depth + 1);
-      out += i1 + "int _cuad_ok" + id + " = 0;\n";
-      out += i1 + "for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {\n";
-      for (const VarDecl *v : si.state)
-        out += i2 + T(v) + " _cuad_n" + id + "_" + v->getNameAsString() + ";\n";
-      out += i2 + "{\n" + shadowAdj(si.params, i3);
-      for (const VarDecl *v : si.state) {
-        std::string x = v->getNameAsString();
-        out += i3 + T(v) + " " + x + "_b = _cuad_l" + id + "_" + x + ";\n";
+      out += i1 + "double " + S + "[" + Ks + "] = {" + sInit + "}, " + X + "[" + Ks + "] = {" + xInit + "}, " + R + "[" +
+             Ks + "], " + J + "[" + Ks + "][" + Ks + "], " + P + "[" + Ks + "][" + Ps + "], " + M + "[" + Ks + "][" + Ks +
+             "], " + D + "[" + Ks + "], " + L + "[" + Ks + "], " + G + "[" + Ps + "] = {0}, " + G2 + "[" + Ps +
+             "] = {0};\n";
+      for (const auto &c : si.comps)
+        out += i1 + c.b + " = 0;\n";
+      // G(x) - x: one more iteration from the exit state, which is restored afterwards (checks only)
+      bool np = noPush_;
+      noPush_ = true;
+      out += i1 + "if (CUAD_SOLVE_CHECK) {\n" + i1 + "{\n";
+      for (const Stmt *s : si.iter)
+        out += genPrimal(s, depth + 2);
+      out += i1 + "}\n";
+      noPush_ = np;
+      for (size_t k = 0; k < K; ++k) {
+        const std::string ks = std::to_string(k);
+        out += i1 + R + "[" + ks + "] = (double)" + si.comps[k].x + " - " + X + "[" + ks + "]; " + si.comps[k].x + " = (" +
+               si.comps[k].T + ")" + X + "[" + ks + "];\n";
       }
-      out += genBlock(si.iter, depth + 3);
-      for (const VarDecl *v : si.state) {
-        std::string x = v->getNameAsString();
-        out += i3 + "_cuad_n" + id + "_" + x + " = _cuad_s" + id + "_" + x + " + " + x + "_b;\n";
+      out += i1 + "}\n";
+      // J and P at the current state, then l and g = P^T l; `into` receives g
+      auto derivative = [&](const std::string &into, bool distance) {
+        std::string o;
+        for (size_t j = 0; j < K; ++j)
+          o += jacobianSweep(si, j, J, P, depth + 1);
+        if (si.params.empty())
+          for (size_t j = 0; j < K; ++j)
+            o += i1 + P + "[" + std::to_string(j) + "][0] = 0;\n";
+        if (distance) {
+          o += i1 + "if (CUAD_SOLVE_CHECK) {\n";
+          o += i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks + "; ++_cuad_i) {\n" + i2 + D + "[_cuad_i] = " + R +
+               "[_cuad_i];\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) " + M +
+               "[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - " + J + "[_cuad_i][_cuad_k];\n" + i1 + "}\n";
+          o += i1 + "if (!cuad_lsolve(" + M + ", " + D + ")) cuad_solve_fail();\n";
+          o += i1 + "{\n" + i2 + "double _cuad_dn = 0, _cuad_xn = 0;\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks +
+               "; ++_cuad_k) { _cuad_dn = fmax(_cuad_dn, fabs(" + D + "[_cuad_k])); _cuad_xn = fmax(_cuad_xn, fabs(" + X +
+               "[_cuad_k])); }\n" + i2 + "if (_cuad_dn > CUAD_SOLVE_TOL * _cuad_xn + CUAD_SOLVE_ATOL) cuad_solve_fail();\n" +
+               i1 + "}\n" + i1 + "}\n";
+        }
+        o += i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks + "; ++_cuad_i) {\n" + i2 + L + "[_cuad_i] = " + S +
+             "[_cuad_i];\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) " + M +
+             "[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - " + J + "[_cuad_k][_cuad_i];\n" + i1 + "}\n";
+        o += i1 + "if (!cuad_lsolve(" + M + ", " + L + ")) cuad_solve_fail();\n";
+        o += i1 + "for (int _cuad_q = 0; _cuad_q < " + Ps + "; ++_cuad_q) {\n" + i2 + into + "[_cuad_q] = 0;\n" + i2 +
+             "for (int _cuad_j = 0; _cuad_j < " + Ks + "; ++_cuad_j) { " + into + "[_cuad_q] += " + L + "[_cuad_j] * " +
+             P + "[_cuad_j][_cuad_q];" +
+             (distance ? " _cuad_a" + id + " += fabs(" + L + "[_cuad_j] * " + P + "[_cuad_j][_cuad_q]);" : "") + " }\n" +
+             i1 + "}\n";
+        return o;
+      };
+      out += i1 + "double _cuad_a" + id + " = 0; // the scale of the terms that make up the derivative\n";
+      out += derivative(G, true);
+      // conditioning: the same at the far side of the interval in which the solution is known. Where the iteration
+      // has a vanishing derivative (Newton's method at a simple root) it converges quadratically, the exit state is
+      // exact to rounding and this second evaluation is skipped; at a double root Newton's G_x is 1/2.
+      out += i1 + "double _cuad_jm" + id + " = 0;\n" + i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks +
+             "; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_jm" + id + " = fmax(_cuad_jm" + id +
+             ", fabs(" + J + "[_cuad_i][_cuad_k]));\n";
+      out += i1 + "if (CUAD_SOLVE_CHECK && (_cuad_jm" + id + " > 0.25 || !(_cuad_a" + id + " < 1e300))) {\n";
+      for (size_t k = 0; k < K; ++k) {
+        const std::string ks = std::to_string(k);
+        out += i1 + si.comps[k].x + " = (" + si.comps[k].T + ")(" + X + "[" + ks + "] + " + D + "[" + ks +
+               "] + copysign(4.440892098500626e-16 * fabs(" + X + "[" + ks + "]), " + D + "[" + ks + "]));\n";
       }
-      out += i2 + "}\n" + i2 + "double _cuad_d = 0, _cuad_m = 0;\n";
-      for (const VarDecl *v : si.state) {
-        std::string x = v->getNameAsString(), n = "_cuad_n" + id + "_" + x, l = "_cuad_l" + id + "_" + x;
-        out += i2 + "_cuad_d = fmax(_cuad_d, fabs((double)(" + n + " - " + l + "))); _cuad_m = fmax(_cuad_m, fabs((double)" +
-               n + ")); " + l + " = " + n + ";\n";
-      }
-      out += i2 + "if (_cuad_d <= 1e-14 * _cuad_m) { _cuad_ok" + id + " = 1; break; }\n" + i1 + "}\n";
-      out += i1 + "if (!_cuad_ok" + id + ") cuad_solve_fail();\n" + i1 + "{\n";
-      for (const VarDecl *v : si.state) {
-        std::string x = v->getNameAsString();
-        out += i2 + T(v) + " " + x + "_b = _cuad_l" + id + "_" + x + ";\n";
-      }
-      out += genBlock(si.iter, depth + 2) + i1 + "}\n" + ind + "}\n";
+      out += derivative(G2, false);
+      for (size_t k = 0; k < K; ++k)
+        out += i1 + si.comps[k].x + " = (" + si.comps[k].T + ")" + X + "[" + std::to_string(k) + "];\n";
+      out += i1 + "{\n" + i2 + "double _cuad_gd = 0;\n" + i2 + "for (int _cuad_q = 0; _cuad_q < " + Ps +
+             "; ++_cuad_q) _cuad_gd = fmax(_cuad_gd, fabs(" + G + "[_cuad_q] - " + G2 + "[_cuad_q]));\n" + i2 +
+             "if (!(_cuad_gd <= CUAD_SOLVE_AGREE * _cuad_a" + id + ") || !(_cuad_a" + id + " < 1e300)) cuad_solve_fail();\n" + i1 + "}\n";
+      out += i1 + "}\n";
+      for (size_t q = 0; q < si.params.size(); ++q)
+        out += i1 + si.params[q]->getNameAsString() + "_b += " + G + "[" + std::to_string(q) + "];\n";
+      out += ind + "}\n";
+      (void)T;
       noPush_ = saved;
       return out;
     }
@@ -2051,7 +2322,7 @@ private:
         lo = lo.empty() ? x : "fmin(" + lo + ", " + x + ")";
         hi = hi.empty() ? x : "fmax(" + hi + ", " + x + ")";
       }
-      out += i1 + "if (" + hi + " - " + lo + " > CUAD_SOLVE_TOL * fmax(fabs(" + hi + "), fabs(" + lo +
+      out += i1 + "if (CUAD_SOLVE_CHECK && " + hi + " - " + lo + " > CUAD_SOLVE_TOL * fmax(fabs(" + hi + "), fabs(" + lo +
              ")) + CUAD_SOLVE_ATOL) cuad_solve_fail();\n";
     }
     out += i1 + Tm + " _cuad_s" + id + " = " + sum + ";\n";
@@ -2079,14 +2350,53 @@ private:
       return o;
     };
     out += shadowAdj(locals, i1);
-    out += i1 + Tm + " _cuad_r" + id + ";\n" + i1 + "{\n" + shadowAdj(si.params, i2) + residualReverse("1", i2, depth + 2) +
-           i2 + "_cuad_r" + id + " = " + m + "_b;\n" + i1 + "}\n";
+    {
+      const std::string Ps = std::to_string(std::max<size_t>(si.params.size(), 1));
+      std::string rec;
+      for (size_t q = 0; q < si.params.size(); ++q)
+        rec += i2 + "_cuad_c" + id + "[" + std::to_string(q) + "] = -" + si.params[q]->getNameAsString() + "_b / " + m +
+               "_b;\n";
+      out += i1 + Tm + " _cuad_r" + id + ";\n" + i1 + "double _cuad_c" + id + "[" + Ps + "] = {0};\n" + i1 + "{\n" +
+             shadowAdj(si.params, i2) + residualReverse("1", i2, depth + 2) + i2 + "_cuad_r" + id + " = " + m + "_b;\n" +
+             rec + i1 + "}\n";
+    }
     // A collapsed bracket is a root only if the residual vanishes there. If the root lies outside the initial bracket
     // (a bound then acts as a floor or a ceiling), the moving bounds close onto the one that never moved, and the
     // result is that bound: its derivative is the derivative of the program. The branch taken at the collapsed point
     // names the bounds that kept moving; the others receive the seed and pass it to their initial values.
     out += i1 + "if (fabs((double)((" + prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) +
            "))) <= fabs((double)_cuad_r" + id + ") * (CUAD_SOLVE_TOL * fabs((double)" + m + ") + CUAD_SOLVE_ATOL)) {\n";
+    { // conditioning: the derivative -r_p / r_m at the upper end of the collapsed bracket must agree with the one at
+      // its midpoint (a double root, where r_m vanishes, does not)
+      const std::string Ps = std::to_string(std::max<size_t>(si.params.size(), 1));
+      std::string lo, hi;
+      for (const VarDecl *v : si.state) {
+        std::string x = "(double)" + v->getNameAsString();
+        lo = lo.empty() ? x : "fmin(" + lo + ", " + x + ")";
+        hi = hi.empty() ? x : "fmax(" + hi + ", " + x + ")";
+      }
+      out += i2 + "if (CUAD_SOLVE_CHECK) {\n" + i2 + "double _cuad_e" + id + "[2][" + Ps + "] = {{0}};\n";
+      out += i2 + "for (int _cuad_q = 0; _cuad_q < " + Ps + "; ++_cuad_q) _cuad_e" + id + "[0][_cuad_q] = _cuad_c" + id +
+             "[_cuad_q];\n";
+      for (int e = 1; e < 2; ++e) {
+        out += i2 + "{\n" + i3 + "const double _cuad_at = " + (e ? hi : lo) + ";\n";
+        for (const VarDecl *v : si.state)
+          out += i3 + T(v) + " " + v->getNameAsString() + " = (" + T(v) + ")_cuad_at;\n";
+        for (const Stmt *s : si.iter)
+          if (s != si.sel)
+            out += genPrimal(s, depth + 3);
+        out += shadowAdj(locals, i3) + shadowAdj(si.params, i3) + residualReverse("1", i3, depth + 3);
+        for (size_t q = 0; q < si.params.size(); ++q)
+          out += i3 + "_cuad_e" + id + "[" + std::to_string(e) + "][" + std::to_string(q) + "] = -" +
+                 si.params[q]->getNameAsString() + "_b / " + m + "_b;\n";
+        out += i2 + "}\n";
+      }
+      out += i2 + "{\n" + i3 + "double _cuad_en = 0, _cuad_ed = 0;\n" + i3 + "for (int _cuad_q = 0; _cuad_q < " + Ps +
+             "; ++_cuad_q) { _cuad_en = fmax(_cuad_en, fmax(fabs(_cuad_e" + id + "[0][_cuad_q]), fabs(_cuad_e" + id +
+             "[1][_cuad_q]))); _cuad_ed = fmax(_cuad_ed, fabs(_cuad_e" + id + "[0][_cuad_q] - _cuad_e" + id +
+             "[1][_cuad_q])); }\n" + i3 + "if (!(_cuad_ed <= CUAD_SOLVE_AGREE * _cuad_en) || !(_cuad_en < 1e300)) cuad_solve_fail();\n" + i2 +
+             "}\n" + i2 + "}\n";
+    }
     out += residualReverse("-(_cuad_s" + id + ") / (_cuad_r" + id + ")", i2, depth + 2);
     std::set<const VarDecl *> thenSet, elseSet;
     for (int armI = 0; armI < 2; ++armI) {
@@ -2558,6 +2868,10 @@ private:
     if (const CallExpr *ce = asCall(s))
       if (!noPush_ && !reusedOutArgs(ce).empty())
         return tapePushCall(ce, ind) + primalLine(s, ind);
+    if (isa<WhileStmt>(s) || isa<DoStmt>(s))
+      if (solveInfo(s).ok) // a convergence loop written as `while` or `do`: it runs as written as well
+        return ind + src(s->getSourceRange()) +
+               (isa<DoStmt>(s) || !isa<CompoundStmt>(loopBody(s)) ? ";\n" : "\n");
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
       // a convergence loop runs as written and stores nothing (its reverse starts from the converged point)
       if (solveInfo(fs).ok)
@@ -2742,7 +3056,7 @@ private:
       const SolveInfo &si = solveInfo(fs);
       if (si.ok)
         return solveAdjoint(fs, si, depth);
-      if (containsBreak(fs->getBody()) && hasActive(fs->getBody()))
+      if ((containsBreak(fs->getBody()) || !si.why.empty()) && hasActive(fs->getBody()))
         unsupported(fs->getBeginLoc(), "a loop that exits with `break` (its trip count is not known "
                                        "when the loop is reversed" +
                                            (si.why.empty() ? std::string(")")
@@ -2797,8 +3111,19 @@ private:
       return out + "\n";
     }
 
+    if (isa<WhileStmt>(s) || isa<DoStmt>(s)) {
+      const SolveInfo &si = solveInfo(s);
+      if (si.ok)
+        return solveAdjoint(s, si, depth);
+      if (hasActive(s))
+        unsupported(s->getBeginLoc(), "a `while` or `do` loop" +
+                                          (si.why.empty() ? std::string(" (only counted `for` loops and convergence "
+                                                                        "loops are reversed)")
+                                                          : " (not a convergence loop: " + si.why + ")"));
+      return out;
+    }
     // anything else that touches active data has no reverse here: say so instead of dropping it
-    if ((isa<WhileStmt>(s) || isa<DoStmt>(s) || isa<SwitchStmt>(s) || isa<GotoStmt>(s) ||
+    if ((isa<SwitchStmt>(s) || isa<GotoStmt>(s) ||
          isa<CXXForRangeStmt>(s)) && hasActive(s))
       unsupported(s->getBeginLoc(), "this loop or jump (only counted `for` loops are reversed)");
     return out;

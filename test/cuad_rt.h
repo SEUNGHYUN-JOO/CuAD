@@ -161,15 +161,19 @@ static inline void cuad_tape_free() {
 #endif
 #endif
 
-// Implicit adjoint of a convergence loop (ReverseMode.h): the iteration l = s + G_x^T l must converge
-// within CUAD_SOLVE_MAXIT steps; if it does not (one iteration is not a contraction at the converged
-// point), trap rather than return a wrong derivative.
+// Implicit derivatives of convergence loops (ReverseMode.h, ForwardMode.h). For a smooth update x <- G(x, p) the
+// generated code forms G_x and G_p from one reverse (or tangent) sweep per state component and solves
+// (I - G_x)^T l = s (or (I - G_x) x' = G_p p') directly, so a slowly contracting loop needs no more work than a fast
+// one. CUAD_SOLVE_MAXIT bounded the adjoint fixed-point iteration of earlier versions; it is kept for compatibility
+// and no longer used.
 #ifndef CUAD_SOLVE_MAXIT
 #define CUAD_SOLVE_MAXIT 200
 #endif
-// Before that iteration, the loop's exit state must be a fixed point of one iteration (or, for a bracketing loop,
-// a collapsed bracket) to within this relative tolerance; a loop that left through its `break` for another reason
-// (a threshold, an iteration cap) traps instead of receiving the derivative of a fixed point it did not reach.
+// The loop's exit state must lie within this relative distance of a solution: for a smooth update the distance
+// |(I - G_x)^{-1} (G(x) - x)| estimated from one more iteration (not just the size of that step, which is smaller
+// by 1 - |G_x| for a slow contraction), for a bracketing loop the width of the collapsed bracket, for a root finder
+// |R / R_t|. A loop that left for another reason (a threshold, an iteration cap) traps instead of receiving the
+// derivative of a solution it did not reach.
 #ifndef CUAD_SOLVE_TOL
 #define CUAD_SOLVE_TOL 1e-6
 #endif
@@ -182,10 +186,67 @@ static inline void cuad_tape_free() {
 // A loop with several candidate residuals (secant, regula falsi, Brent): when more than one vanishes at the exit
 // state, they must locate the same root and imply the same derivative of it to this relative tolerance; otherwise
 // the relation the loop solved is ambiguous and the adjoint traps.
+// The same tolerance bounds the conditioning of the solution: the derivative is evaluated again at the edge of the
+// interval in which the solution is known (the estimated distance, the bracket, |R / R_t|) and must agree with the
+// derivative at the exit state. A double root, where the derivative does not exist, or a root so ill-conditioned
+// that the loop's tolerance leaves its derivative undetermined, traps.
 #ifndef CUAD_SOLVE_AGREE
 #define CUAD_SOLVE_AGREE 1e-4
 #endif
 #define cuad_solve_fail() cuad_tape_fail()
+// -DCUAD_SOLVE_CHECK=0 compiles out every test above together with the extra evaluations it needs (one more
+// iteration, the second derivative evaluation). It exists to measure what the tests cost; the derivative of a loop
+// that did not reach a solution is then returned without warning.
+#ifndef CUAD_SOLVE_CHECK
+#define CUAD_SOLVE_CHECK 1
+#endif
+
+// Solve the small dense system A x = b in place (b becomes x) by Gaussian elimination with partial pivoting. Every
+// index is a compile-time constant after unrolling, so A and b stay in registers. Returns 0 if A is singular to
+// working precision (a pivot below 1e-13 times the largest entry), in which case the solution is not isolated.
+template <int K>
+static inline CUAD_HD int cuad_lsolve(double (&A)[K][K], double (&b)[K]) {
+  double big = 0;
+#pragma unroll
+  for (int i = 0; i < K; ++i)
+#pragma unroll
+    for (int j = 0; j < K; ++j)
+      big = (A[i][j] < 0 ? -A[i][j] : A[i][j]) > big ? (A[i][j] < 0 ? -A[i][j] : A[i][j]) : big;
+#pragma unroll
+  for (int c = 0; c < K; ++c) {
+#pragma unroll
+    for (int r = c + 1; r < K; ++r) { // bring the largest remaining entry of column c to row c
+      double ar = A[r][c] < 0 ? -A[r][c] : A[r][c], ac = A[c][c] < 0 ? -A[c][c] : A[c][c];
+      if (ar > ac) {
+#pragma unroll
+        for (int j = 0; j < K; ++j) {
+          double t = A[r][j]; A[r][j] = A[c][j]; A[c][j] = t;
+        }
+        double t = b[r]; b[r] = b[c]; b[c] = t;
+      }
+    }
+    double piv = A[c][c] < 0 ? -A[c][c] : A[c][c];
+    if (!(piv > 1e-13 * big))
+      return 0;
+#pragma unroll
+    for (int r = c + 1; r < K; ++r) {
+      double f = A[r][c] / A[c][c];
+#pragma unroll
+      for (int j = c; j < K; ++j)
+        A[r][j] -= f * A[c][j];
+      b[r] -= f * b[c];
+    }
+  }
+#pragma unroll
+  for (int r = K - 1; r >= 0; --r) {
+    double s = b[r];
+#pragma unroll
+    for (int j = r + 1; j < K; ++j)
+      s -= A[r][j] * b[j];
+    b[r] = s / A[r][r];
+  }
+  return 1;
+}
 
 // Bounds of the element ranges that a loop's per-iteration checkpoint saves (see ReverseMode.h).
 static inline CUAD_HD long long cuad_imin(long long a, long long b) { return a < b ? a : b; }

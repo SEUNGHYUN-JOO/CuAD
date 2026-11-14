@@ -1,7 +1,7 @@
 """Where the cost of the C2P gradient comes from, at 2^20 cells on the GPU (c2p_gpu_ablation.so, built from
 c2p_gpu_compare.cu with -DWITH_ABLATION):
   - Enzyme on the unchanged kernels and on a copy whose pointer parameters are all __restrict__ (aliasing information),
-  - the CuAD implicit adjoint with and without its run-time checks (strip_checks.py),
+  - the CuAD implicit adjoint with and without its run-time checks (-DCUAD_SOLVE_CHECK=0),
   - the primal and the hand-written implicit adjoint for reference,
 with registers and local memory per thread, the spread over three runs of ten launches, a dot test against central
 differences on 4096 cells, and the smallest device heap with which Enzyme runs on the __restrict__ kernels."""

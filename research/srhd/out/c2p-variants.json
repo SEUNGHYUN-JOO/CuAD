@@ -4,8 +4,8 @@
     "tool": "cuad",
     "states": 143,
     "primal_accurate_states": 102,
-    "jacobian_error_median": 8.238052228750569e-14,
-    "jacobian_error_max": 1.1837245934824435e-09,
+    "jacobian_error_median": 8.262211832320933e-14,
+    "jacobian_error_max": 1.1837254160618986e-09,
     "states_with_error_above_1e_6": 0
   },
   {

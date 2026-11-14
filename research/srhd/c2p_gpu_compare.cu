@@ -29,8 +29,12 @@ namespace devr { // the C2P kernels with every pointer parameter declared __rest
 #include "srhd_restrict.cu"
 #pragma pop_macro("__global__")
 }
-namespace nochk { // the CuAD adjoint without its run-time checks (strip_checks.py), to measure their cost
-#include "srhd_b_nocheck.cuh"
+namespace nochk { // the CuAD adjoint compiled without its run-time checks, to measure their cost
+#pragma push_macro("CUAD_SOLVE_CHECK")
+#undef CUAD_SOLVE_CHECK
+#define CUAD_SOLVE_CHECK 0
+#include "srhd_b.cuh"
+#pragma pop_macro("CUAD_SOLVE_CHECK")
 }
 #endif
 extern __device__ int enzyme_dup, enzyme_const;

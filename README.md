@@ -71,35 +71,38 @@ Main results:
 }
 ```
 
-## Implicit adjoints of convergence loops (v0.3)
+## Implicit derivatives of convergence loops (v0.4)
 
 Physics kernels often solve a small nonlinear equation in every thread with a loop that runs
-until `if (c) break;`. Differentiating the executed iterations stores every iterate, and for
-bisection it returns the derivative of the initial bracket instead of the derivative of the
-root, without any warning. CuAD 0.3 recognizes such loops in unchanged CUDA source and
-differentiates the converged solution through the relation it satisfies.
+until `if (c) break;` or until its condition fails. Differentiating the executed iterations
+stores every iterate, and for bisection it returns the derivative of the initial bracket
+instead of the derivative of the root, without any warning. CuAD recognizes such loops in
+unchanged CUDA source and differentiates the converged solution through the relation it
+satisfies, in reverse and in forward mode.
 
 <p align="center">
-  <img src="docs/figs/srhd_overview.png" width="95%" alt="Recognition of a convergence loop and the forward and reverse sweeps of program AD and CuAD">
-  <br><em>(a) The static analysis places a loop in one of three classes or rejects it; the reverse
-  sweep checks the exit state before it applies the implicit adjoint. (b) Program AD stores
-  and replays every iterate; CuAD evaluates one relation at the exit state.</em>
+  <img src="docs/figs/srhd_overview.png" width="95%" alt="Recognition of a convergence loop and the forward and reverse sweeps of black-box AD and CuAD">
+  <br><em>(a) The static analysis places a loop in one of three classes or rejects it; the
+  derivative code checks the exit state before it applies the implicit relation. (b) Black-box
+  AD stores and replays every iterate; CuAD evaluates one relation at the exit state.</em>
 </p>
 
-- **Three classes found by static analysis.** A smooth update (Newton, fixed point) gets
-  Christianson's adjoint iteration, a bracketing update (bisection) gets the derivative of
-  the root, and a loop with several iterated states (secant, Illinois regula falsi, Brent) is
-  differentiated through a residual that the analysis finds in the loop body. Nothing is
-  stored per iteration.
-- **Run-time checks instead of silent errors.** The adjoint traps when the loop left through
-  its `break` away from a solution, when it reached its iteration cap, or when the relation it
-  solved is ambiguous.
+- **Three classes found by static analysis.** A smooth update (Newton, fixed point, also a
+  small system with a local-array state) gets (I - G_x)^T l = s solved directly, a bracketing
+  update (bisection) gets the derivative of the root, and a loop with several iterated states
+  (secant, Illinois regula falsi, Brent) is differentiated through a residual that the analysis
+  finds in the loop body. `for`, `while` and `do` loops are accepted. Nothing is stored per
+  iteration.
+- **Run-time checks instead of silent errors.** The derivative traps when the loop left away
+  from a solution (the estimated distance, not just the last step, which hides a slow
+  contraction), when the relation it solved is ambiguous, or when the derivative is not
+  determined there (a double root).
 - **Verified against independent references.** On the conservative-to-primitive step of
   special-relativistic hydrodynamics (SRHD), the implicit adjoints of Newton, bisection,
   regula falsi and Brent match a 50-digit Jacobian to a median relative error below 1e-13.
   Enzyme's differentiated bisection has a median error of 0.41 on the same states.
-- **GPU cost.** At 2^20 cells the implicit adjoint costs 1.8 times the Newton primal and 1.1
-  times the bisection primal. Enzyme's differentiated iterations take 790 and 700 times as long as the CuAD adjoint.
+- **GPU cost.** At 2^20 cells the implicit adjoint costs 1.7 times the Newton primal and 1.2
+  times the bisection primal. Enzyme's differentiated iterations take 830 and 640 times as long as the CuAD adjoint.
 - **Application.** The discrete adjoint of 1-D and 2-D SRHD solvers written as ordinary CUDA
   reconstructs the density of a medium from the passage of a relativistic shock: 0.18 % error
   in 1-D, and 3456 unknowns to 0.28 % in about one minute on the GPU in 2-D.
@@ -185,28 +188,29 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   thread-local arrays and scalars use plain `+=`.
 - **Loops**: grid-stride loops, loops with local declarations (recomputed per
   iteration in the reverse sweep), `#pragma unroll`, early exits (`continue`, `return`).
-- **Convergence loops (reverse mode)**: a `for` loop that iterates floating locals until
-  `if (c) break;` (a Newton or fixed-point solve, a bisection) is differentiated at its
-  converged point instead of iteration by iteration, and nothing is stored per iteration.
-  A smooth update x <- G(x, p) gets the adjoint l = s + G_x^T l (iterated with the reverse of
-  one iteration, Christianson's method) and then p_b += G_p^T l. A bracketing update, where
-  the inputs reach the bracket only through the branch `if (r(m) > 0) lo = m; else hi = m;`,
-  gets p_b -= r_p s / r_m: differentiating its iterations would give the derivative of the
-  initial bracket, not of the root. A loop with several iterated variables (secant, regula
-  falsi, Brent) is differentiated through the residual it evaluates: a value computed from one
-  trial point and the inputs that steers the loop (it is tested in a condition or feeds the
-  update of the state). All candidates are evaluated at the exit state; when several vanish
-  they must agree on the root and on its derivative, otherwise the adjoint traps.
-  Loops that change memory, call user functions or nest other loops are rejected. At run time
-  the exit state must be a fixed point, a collapsed bracket or a root, otherwise the adjoint
-  traps; a bracket that collapses onto a bound because the root lies outside it gives that
-  bound's derivative. The tolerances are macros of `cuad_rt.h`: `CUAD_SOLVE_TOL` (relative,
-  default 1e-6), `CUAD_SOLVE_ATOL` (absolute, in the units of the state, default 0),
-  `CUAD_SOLVE_AGREE` (agreement of several vanishing residuals, default 1e-4) and
-  `CUAD_SOLVE_MAXIT` (cap of the adjoint fixed-point iteration, default 200). The adjoint iteration stops at a
-  relative change of 1e-14 and needs about log(1e-14)/log(rho) sweeps for a loop that contracts at rate rho, so raise
-  `CUAD_SOLVE_MAXIT` for slowly contracting loops (rho >= 0.9); otherwise their adjoint traps.
-- **C++ constructs**: function templates, default arguments, `float &` output
+- **Convergence loops (reverse and forward mode)**: a `for`, `while` or `do` loop that iterates
+  floating locals (scalars or a local array) until `if (c) break;` or until its condition fails
+  (a Newton or fixed-point solve, a bisection, a secant or Brent root finder) is differentiated at
+  its converged point instead of iteration by iteration, and nothing is stored per iteration.
+  A smooth update x <- G(x, p) gets G_x and G_p from one sweep of one iteration per state
+  component; (I - G_x)^T l = s (reverse) or (I - G_x) x' = G_p p' (forward) is solved directly,
+  so a slowly contracting loop costs no more than a fast one. A bracketing update, where the
+  inputs reach the bracket only through the branch `if (r(m) > 0) lo = m; else hi = m;`, gets
+  the root's derivative -r_p / r_m: differentiating its iterations would give the derivative of
+  the initial bracket, not of the root. A loop with several iterated variables and no smooth map
+  (secant, regula falsi, Brent) is differentiated through the residual it evaluates: a value
+  computed from one trial point and the inputs that steers the loop (it is tested in a condition
+  or feeds the update of the state). All candidates are evaluated at the exit state; when several
+  vanish they must agree on the root and on its derivative, otherwise the derivative traps.
+  Iteration counters (`++it`) and calls to pure functions (parameters by value, a floating
+  result) may appear in the body; loops that write other memory or nest other loops are rejected.
+  At run time the exit state must lie within `CUAD_SOLVE_TOL` (relative, default 1e-6) of a
+  solution: the distance (I - G_x)^-1 (G(x) - x) for a smooth update, the bracket width, or
+  |R / R_t|. The derivative is evaluated again at the far side of that interval and must agree
+  to `CUAD_SOLVE_AGREE` (default 1e-4); a double root or a degenerate fixed point therefore
+  traps instead of returning an arbitrary value. A bracket that collapses onto a bound because the
+  root lies outside it gives that bound's derivative. `CUAD_SOLVE_ATOL` (absolute, in the units
+  of the state, default 0) is the absolute part of every test.- **C++ constructs**: function templates, default arguments, `float &` output
   parameters, local pointers and arrays of pointers, `c ? a : b`, multi-declarator
   statements, bare `{ ... }` blocks.
 - **Math library**: `sin`, `cos`, `tan`, `exp`, `log`, `sqrt`, `tanh`, `fabs`, `pow`,
@@ -233,13 +237,11 @@ __global__ void apply_f_b(const double * x, double *x_b, double * y, double *y_b
   outside the loop are not seen, so do not alias a local array with a local pointer.
 - Integer locals are not taped: give a reassigned integer local a new variable for each
   value it takes.
-- Not supported in reverse mode: `while`, `do` and `switch` statements and `for` loops
+- Not supported in reverse mode: `switch` statements, and `while` and `do` loops or `for` loops
   that exit with `break` other than the convergence loops above, when they touch active data.
-  A convergence loop is assumed to have converged: its adjoint is that of the solution of
-  the equation it solves (the iteration for l traps if it does not converge). Forward mode
-  differentiates smooth convergence loops iteration by iteration and rejects bracketing ones. Lambdas and straight-line
-  in-place updates of a local-array element that an earlier statement also reads are
-  not supported in either mode.
+  The derivative of a convergence loop is that of the solution of the equation it solves; the
+  run-time tests above check that the loop reached it. Lambdas and straight-line in-place updates
+  of a local-array element that an earlier statement also reads are not supported in either mode.
 - **Unsupported constructs are rejected.** CuAD reports each one as
   `file:line:col: error: ...` and exits with status 3; the code it still writes is
   marked with `TODO(cuad)` comments and its derivatives are not valid there.

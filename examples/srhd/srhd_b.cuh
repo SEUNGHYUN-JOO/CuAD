@@ -52,95 +52,120 @@ __global__ void c2p_newton_b(const double * U, double *U_b, double * P, double *
     tau_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
     D_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
     p_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
-    { // cuad: implicit adjoint of the convergence loop at line 16: l = s + G_x^T l over one iteration, then the inputs get G_p^T l
-      double _cuad_s3_p = p_b, _cuad_l3_p = p_b;
+    { // cuad: implicit adjoint of the convergence loop at line 16: (I - G_x)^T l = s solved directly, then the inputs get G_p^T l
+      double _cuad_s3[1] = {(double)p_b}, _cuad_x3[1] = {(double)p}, _cuad_r3[1], _cuad_J3[1][1], _cuad_P3[1][5], _cuad_M3[1][1], _cuad_d3[1], _cuad_l3[1], _cuad_g3[5] = {0}, _cuad_h3[5] = {0};
       p_b = 0;
-      { // cuad: the loop must have stopped at a fixed point of one iteration
-        double _cuad_f3_p = p;
-        {
-          double v = S / (tau + D + p);
-          double W = 1.0 / sqrt(1.0 - v * v);
-          double rho = D / W;
-          double eps = (tau + D * (1.0 - W) + p * (1.0 - W * W)) / (D * W);
-          double f = (g - 1.0) * rho * eps - p;
-          double cs2 = g * (g - 1.0) * eps / (1.0 + g * eps);
-          double dp = f / (v * v * cs2 - 1.0);
-          p = fmax(p - dp, pmin);
-        }
-        double _cuad_fr = 0, _cuad_fs = 0;
-        _cuad_fr = fmax(_cuad_fr, fabs((double)(p - _cuad_f3_p))); _cuad_fs = fmax(_cuad_fs, fabs((double)_cuad_f3_p)); p = _cuad_f3_p;
-        if (_cuad_fr > CUAD_SOLVE_TOL * _cuad_fs + CUAD_SOLVE_ATOL) cuad_solve_fail();
-      }
-      int _cuad_ok3 = 0;
-      for (int _cuad_it = 0; _cuad_it < CUAD_SOLVE_MAXIT; ++_cuad_it) {
-        double _cuad_n3_p;
-        {
-          double D_b = 0;
-          double S_b = 0;
-          double tau_b = 0;
-          double g_b = 0;
-          double pmin_b = 0;
-          double p_b = _cuad_l3_p;
-          double v = S / (tau + D + p);
-          double W = 1.0 / sqrt(1.0 - v * v);
-          double rho = D / W;
-          double eps = (tau + D * (1.0 - W) + p * (1.0 - W * W)) / (D * W);
-          double f = (g - 1.0) * rho * eps - p;
-          double cs2 = g * (g - 1.0) * eps / (1.0 + g * eps);
-          double dp = f / (v * v * cs2 - 1.0);
-          cuad_push(p);
-          p = fmax(p - dp, pmin);
-          double v_b = 0;
-          double W_b = 0;
-          double rho_b = 0;
-          double eps_b = 0;
-          double f_b = 0;
-          double cs2_b = 0;
-          double dp_b = 0;
-          cuad_pop(p);
-          double _cuad_b4 = p_b;
-          p_b = 0;
-          p_b += ((p - dp) >= (pmin) ? (_cuad_b4) : 0);
-          dp_b += -(((p - dp) >= (pmin) ? (_cuad_b4) : 0));
-          pmin_b += ((p - dp) >= (pmin) ? 0 : (_cuad_b4));
-          f_b += (dp_b)/((v * v * cs2 - 1.0));
-          v_b += ((-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))))*(cs2))*(v);
-          v_b += (v)*((-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))))*(cs2));
-          cs2_b += (v * v)*(-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))));
-          g_b += (((cs2_b)/((1.0 + g * eps)))*(eps))*((g - 1.0));
-          g_b += (g)*(((cs2_b)/((1.0 + g * eps)))*(eps));
-          eps_b += (g * (g - 1.0))*((cs2_b)/((1.0 + g * eps)));
-          g_b += (-((cs2_b)*(g * (g - 1.0) * eps))/(((1.0 + g * eps))*((1.0 + g * eps))))*(eps);
-          eps_b += (g)*(-((cs2_b)*(g * (g - 1.0) * eps))/(((1.0 + g * eps))*((1.0 + g * eps))));
-          g_b += ((f_b)*(eps))*(rho);
-          rho_b += ((g - 1.0))*((f_b)*(eps));
-          eps_b += ((g - 1.0) * rho)*(f_b);
-          p_b += -(f_b);
-          tau_b += (eps_b)/((D * W));
-          D_b += ((eps_b)/((D * W)))*((1.0 - W));
-          W_b += -((D)*((eps_b)/((D * W))));
-          p_b += ((eps_b)/((D * W)))*((1.0 - W * W));
-          W_b += (-((p)*((eps_b)/((D * W)))))*(W);
-          W_b += (W)*(-((p)*((eps_b)/((D * W)))));
-          D_b += (-((eps_b)*((tau + D * (1.0 - W) + p * (1.0 - W * W))))/(((D * W))*((D * W))))*(W);
-          W_b += (D)*(-((eps_b)*((tau + D * (1.0 - W) + p * (1.0 - W * W))))/(((D * W))*((D * W))));
-          D_b += (rho_b)/(W);
-          W_b += -((rho_b)*(D))/((W)*(W));
-          v_b += (-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))))*(v);
-          v_b += (v)*(-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))));
-          S_b += (v_b)/((tau + D + p));
-          tau_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
-          D_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
-          p_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
-          _cuad_n3_p = _cuad_s3_p + p_b;
-        }
-        double _cuad_d = 0, _cuad_m = 0;
-        _cuad_d = fmax(_cuad_d, fabs((double)(_cuad_n3_p - _cuad_l3_p))); _cuad_m = fmax(_cuad_m, fabs((double)_cuad_n3_p)); _cuad_l3_p = _cuad_n3_p;
-        if (_cuad_d <= 1e-14 * _cuad_m) { _cuad_ok3 = 1; break; }
-      }
-      if (!_cuad_ok3) cuad_solve_fail();
+      if (CUAD_SOLVE_CHECK) {
       {
-        double p_b = _cuad_l3_p;
+        double v = S / (tau + D + p);
+        double W = 1.0 / sqrt(1.0 - v * v);
+        double rho = D / W;
+        double eps = (tau + D * (1.0 - W) + p * (1.0 - W * W)) / (D * W);
+        double f = (g - 1.0) * rho * eps - p;
+        double cs2 = g * (g - 1.0) * eps / (1.0 + g * eps);
+        double dp = f / (v * v * cs2 - 1.0);
+        p = fmax(p - dp, pmin);
+      }
+      _cuad_r3[0] = (double)p - _cuad_x3[0]; p = (double)_cuad_x3[0];
+      }
+      double _cuad_a3 = 0; // the scale of the terms that make up the derivative
+      {
+        double D_b = 0;
+        double S_b = 0;
+        double tau_b = 0;
+        double g_b = 0;
+        double pmin_b = 0;
+        double p_b = 1;
+        double v = S / (tau + D + p);
+        double W = 1.0 / sqrt(1.0 - v * v);
+        double rho = D / W;
+        double eps = (tau + D * (1.0 - W) + p * (1.0 - W * W)) / (D * W);
+        double f = (g - 1.0) * rho * eps - p;
+        double cs2 = g * (g - 1.0) * eps / (1.0 + g * eps);
+        double dp = f / (v * v * cs2 - 1.0);
+        cuad_push(p);
+        p = fmax(p - dp, pmin);
+        double v_b = 0;
+        double W_b = 0;
+        double rho_b = 0;
+        double eps_b = 0;
+        double f_b = 0;
+        double cs2_b = 0;
+        double dp_b = 0;
+        cuad_pop(p);
+        double _cuad_b4 = p_b;
+        p_b = 0;
+        p_b += ((p - dp) >= (pmin) ? (_cuad_b4) : 0);
+        dp_b += -(((p - dp) >= (pmin) ? (_cuad_b4) : 0));
+        pmin_b += ((p - dp) >= (pmin) ? 0 : (_cuad_b4));
+        f_b += (dp_b)/((v * v * cs2 - 1.0));
+        v_b += ((-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))))*(cs2))*(v);
+        v_b += (v)*((-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))))*(cs2));
+        cs2_b += (v * v)*(-((dp_b)*(f))/(((v * v * cs2 - 1.0))*((v * v * cs2 - 1.0))));
+        g_b += (((cs2_b)/((1.0 + g * eps)))*(eps))*((g - 1.0));
+        g_b += (g)*(((cs2_b)/((1.0 + g * eps)))*(eps));
+        eps_b += (g * (g - 1.0))*((cs2_b)/((1.0 + g * eps)));
+        g_b += (-((cs2_b)*(g * (g - 1.0) * eps))/(((1.0 + g * eps))*((1.0 + g * eps))))*(eps);
+        eps_b += (g)*(-((cs2_b)*(g * (g - 1.0) * eps))/(((1.0 + g * eps))*((1.0 + g * eps))));
+        g_b += ((f_b)*(eps))*(rho);
+        rho_b += ((g - 1.0))*((f_b)*(eps));
+        eps_b += ((g - 1.0) * rho)*(f_b);
+        p_b += -(f_b);
+        tau_b += (eps_b)/((D * W));
+        D_b += ((eps_b)/((D * W)))*((1.0 - W));
+        W_b += -((D)*((eps_b)/((D * W))));
+        p_b += ((eps_b)/((D * W)))*((1.0 - W * W));
+        W_b += (-((p)*((eps_b)/((D * W)))))*(W);
+        W_b += (W)*(-((p)*((eps_b)/((D * W)))));
+        D_b += (-((eps_b)*((tau + D * (1.0 - W) + p * (1.0 - W * W))))/(((D * W))*((D * W))))*(W);
+        W_b += (D)*(-((eps_b)*((tau + D * (1.0 - W) + p * (1.0 - W * W))))/(((D * W))*((D * W))));
+        D_b += (rho_b)/(W);
+        W_b += -((rho_b)*(D))/((W)*(W));
+        v_b += (-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))))*(v);
+        v_b += (v)*(-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))));
+        S_b += (v_b)/((tau + D + p));
+        tau_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
+        D_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
+        p_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
+        _cuad_J3[0][0] = p_b;
+        _cuad_P3[0][0] = D_b;
+        _cuad_P3[0][1] = S_b;
+        _cuad_P3[0][2] = tau_b;
+        _cuad_P3[0][3] = g_b;
+        _cuad_P3[0][4] = pmin_b;
+      }
+      if (CUAD_SOLVE_CHECK) {
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_d3[_cuad_i] = _cuad_r3[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M3[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J3[_cuad_i][_cuad_k];
+      }
+      if (!cuad_lsolve(_cuad_M3, _cuad_d3)) cuad_solve_fail();
+      {
+        double _cuad_dn = 0, _cuad_xn = 0;
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) { _cuad_dn = fmax(_cuad_dn, fabs(_cuad_d3[_cuad_k])); _cuad_xn = fmax(_cuad_xn, fabs(_cuad_x3[_cuad_k])); }
+        if (_cuad_dn > CUAD_SOLVE_TOL * _cuad_xn + CUAD_SOLVE_ATOL) cuad_solve_fail();
+      }
+      }
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_l3[_cuad_i] = _cuad_s3[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M3[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J3[_cuad_k][_cuad_i];
+      }
+      if (!cuad_lsolve(_cuad_M3, _cuad_l3)) cuad_solve_fail();
+      for (int _cuad_q = 0; _cuad_q < 5; ++_cuad_q) {
+        _cuad_g3[_cuad_q] = 0;
+        for (int _cuad_j = 0; _cuad_j < 1; ++_cuad_j) { _cuad_g3[_cuad_q] += _cuad_l3[_cuad_j] * _cuad_P3[_cuad_j][_cuad_q]; _cuad_a3 += fabs(_cuad_l3[_cuad_j] * _cuad_P3[_cuad_j][_cuad_q]); }
+      }
+      double _cuad_jm3 = 0;
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_jm3 = fmax(_cuad_jm3, fabs(_cuad_J3[_cuad_i][_cuad_k]));
+      if (CUAD_SOLVE_CHECK && (_cuad_jm3 > 0.25 || !(_cuad_a3 < 1e300))) {
+      p = (double)(_cuad_x3[0] + _cuad_d3[0] + copysign(4.440892098500626e-16 * fabs(_cuad_x3[0]), _cuad_d3[0]));
+      {
+        double D_b = 0;
+        double S_b = 0;
+        double tau_b = 0;
+        double g_b = 0;
+        double pmin_b = 0;
+        double p_b = 1;
         double v = S / (tau + D + p);
         double W = 1.0 / sqrt(1.0 - v * v);
         double rho = D / W;
@@ -192,7 +217,34 @@ __global__ void c2p_newton_b(const double * U, double *U_b, double * P, double *
         tau_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
         D_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
         p_b += -((v_b)*(S))/(((tau + D + p))*((tau + D + p)));
+        _cuad_J3[0][0] = p_b;
+        _cuad_P3[0][0] = D_b;
+        _cuad_P3[0][1] = S_b;
+        _cuad_P3[0][2] = tau_b;
+        _cuad_P3[0][3] = g_b;
+        _cuad_P3[0][4] = pmin_b;
       }
+      for (int _cuad_i = 0; _cuad_i < 1; ++_cuad_i) {
+        _cuad_l3[_cuad_i] = _cuad_s3[_cuad_i];
+        for (int _cuad_k = 0; _cuad_k < 1; ++_cuad_k) _cuad_M3[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - _cuad_J3[_cuad_k][_cuad_i];
+      }
+      if (!cuad_lsolve(_cuad_M3, _cuad_l3)) cuad_solve_fail();
+      for (int _cuad_q = 0; _cuad_q < 5; ++_cuad_q) {
+        _cuad_h3[_cuad_q] = 0;
+        for (int _cuad_j = 0; _cuad_j < 1; ++_cuad_j) { _cuad_h3[_cuad_q] += _cuad_l3[_cuad_j] * _cuad_P3[_cuad_j][_cuad_q]; }
+      }
+      p = (double)_cuad_x3[0];
+      {
+        double _cuad_gd = 0;
+        for (int _cuad_q = 0; _cuad_q < 5; ++_cuad_q) _cuad_gd = fmax(_cuad_gd, fabs(_cuad_g3[_cuad_q] - _cuad_h3[_cuad_q]));
+        if (!(_cuad_gd <= CUAD_SOLVE_AGREE * _cuad_a3) || !(_cuad_a3 < 1e300)) cuad_solve_fail();
+      }
+      }
+      D_b += _cuad_g3[0];
+      S_b += _cuad_g3[1];
+      tau_b += _cuad_g3[2];
+      g_b += _cuad_g3[3];
+      pmin_b += _cuad_g3[4];
     }
     g_b += ((((g - 1.0) * tau) >= (pmin) ? (p_b) : 0))*(tau);
     tau_b += ((g - 1.0))*((((g - 1.0) * tau) >= (pmin) ? (p_b) : 0));
@@ -259,7 +311,7 @@ __global__ void c2p_bisect_b(const double * U, double *U_b, double * P, double *
     lo_b += (0.5)*(p_b);
     hi_b += (0.5)*(p_b);
     { // cuad: implicit adjoint of the bracketing loop at line 41: its result is the root of r = (f) - (0) in m; the inputs get -r_p s / r_m
-      if (fmax((double)lo, (double)hi) - fmin((double)lo, (double)hi) > CUAD_SOLVE_TOL * fmax(fabs(fmax((double)lo, (double)hi)), fabs(fmin((double)lo, (double)hi))) + CUAD_SOLVE_ATOL) cuad_solve_fail();
+      if (CUAD_SOLVE_CHECK && fmax((double)lo, (double)hi) - fmin((double)lo, (double)hi) > CUAD_SOLVE_TOL * fmax(fabs(fmax((double)lo, (double)hi)), fabs(fmin((double)lo, (double)hi))) + CUAD_SOLVE_ATOL) cuad_solve_fail();
       double _cuad_s3 = lo_b + hi_b;
       lo_b = 0;
       hi_b = 0;
@@ -274,6 +326,7 @@ __global__ void c2p_bisect_b(const double * U, double *U_b, double * P, double *
       double eps_b = 0;
       double f_b = 0;
       double _cuad_r3;
+      double _cuad_c3[4] = {0};
       {
         double D_b = 0;
         double S_b = 0;
@@ -305,8 +358,69 @@ __global__ void c2p_bisect_b(const double * U, double *U_b, double * P, double *
         D_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
         m_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
         _cuad_r3 = m_b;
+        _cuad_c3[0] = -D_b / m_b;
+        _cuad_c3[1] = -S_b / m_b;
+        _cuad_c3[2] = -tau_b / m_b;
+        _cuad_c3[3] = -g_b / m_b;
       }
       if (fabs((double)((f) - (0))) <= fabs((double)_cuad_r3) * (CUAD_SOLVE_TOL * fabs((double)m) + CUAD_SOLVE_ATOL)) {
+        if (CUAD_SOLVE_CHECK) {
+        double _cuad_e3[2][4] = {{0}};
+        for (int _cuad_q = 0; _cuad_q < 4; ++_cuad_q) _cuad_e3[0][_cuad_q] = _cuad_c3[_cuad_q];
+        {
+          const double _cuad_at = fmax((double)lo, (double)hi);
+          double lo = (double)_cuad_at;
+          double hi = (double)_cuad_at;
+          double m = 0.5 * (lo + hi);
+          double v = S / (tau + D + m);
+          double W = 1.0 / sqrt(1.0 - v * v);
+          double eps = (tau + D * (1.0 - W) + m * (1.0 - W * W)) / (D * W);
+          double f = (g - 1.0) * (D / W) * eps - m;
+          double m_b = 0;
+          double v_b = 0;
+          double W_b = 0;
+          double eps_b = 0;
+          double f_b = 0;
+          double D_b = 0;
+          double S_b = 0;
+          double tau_b = 0;
+          double g_b = 0;
+          m_b = 0;
+          v_b = 0;
+          W_b = 0;
+          eps_b = 0;
+          f_b = 0;
+          f_b += 1;
+          g_b += ((f_b)*(eps))*((D / W));
+          D_b += (((g - 1.0))*((f_b)*(eps)))/(W);
+          W_b += -((((g - 1.0))*((f_b)*(eps)))*(D))/((W)*(W));
+          eps_b += ((g - 1.0) * (D / W))*(f_b);
+          m_b += -(f_b);
+          tau_b += (eps_b)/((D * W));
+          D_b += ((eps_b)/((D * W)))*((1.0 - W));
+          W_b += -((D)*((eps_b)/((D * W))));
+          m_b += ((eps_b)/((D * W)))*((1.0 - W * W));
+          W_b += (-((m)*((eps_b)/((D * W)))))*(W);
+          W_b += (W)*(-((m)*((eps_b)/((D * W)))));
+          D_b += (-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))))*(W);
+          W_b += (D)*(-((eps_b)*((tau + D * (1.0 - W) + m * (1.0 - W * W))))/(((D * W))*((D * W))));
+          v_b += (-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))))*(v);
+          v_b += (v)*(-((1.0/(2.0*sqrt(1.0 - v * v)))*(-((W_b)*(1.0))/((sqrt(1.0 - v * v))*(sqrt(1.0 - v * v))))));
+          S_b += (v_b)/((tau + D + m));
+          tau_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+          D_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+          m_b += -((v_b)*(S))/(((tau + D + m))*((tau + D + m)));
+          _cuad_e3[1][0] = -D_b / m_b;
+          _cuad_e3[1][1] = -S_b / m_b;
+          _cuad_e3[1][2] = -tau_b / m_b;
+          _cuad_e3[1][3] = -g_b / m_b;
+        }
+        {
+          double _cuad_en = 0, _cuad_ed = 0;
+          for (int _cuad_q = 0; _cuad_q < 4; ++_cuad_q) { _cuad_en = fmax(_cuad_en, fmax(fabs(_cuad_e3[0][_cuad_q]), fabs(_cuad_e3[1][_cuad_q]))); _cuad_ed = fmax(_cuad_ed, fabs(_cuad_e3[0][_cuad_q] - _cuad_e3[1][_cuad_q])); }
+          if (!(_cuad_ed <= CUAD_SOLVE_AGREE * _cuad_en) || !(_cuad_en < 1e300)) cuad_solve_fail();
+        }
+        }
         m_b = 0;
         v_b = 0;
         W_b = 0;

@@ -8,15 +8,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 6.249e-05,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 5.718e-05,
   "iterations": 12,
   "value": 1.3283448113299767,
   "grad": [
-   -0.1821272153728471,
-   0.13710838768624853,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -89,8 +89,8 @@
   "iterations": 18,
   "value": 1.3282700423788512,
   "grad": [
-   -0.18213184454329434,
-   0.13711959069490662,
+   -0.18213184454329565,
+   0.1371195906949076,
    0
   ],
   "exact": [
@@ -114,8 +114,8 @@
   "iterations": 18,
   "value": 1.3282700423788512,
   "grad": [
-   -0.18213184454329434,
-   0.13711959069490662,
+   -0.18213184454329565,
+   0.1371195906949076,
    0
   ],
   "exact": [
@@ -164,8 +164,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -189,8 +189,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -214,8 +214,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -234,13 +234,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -259,13 +259,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -284,13 +284,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -309,13 +309,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -334,13 +334,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -359,13 +359,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -381,31 +381,6 @@
   "tolp": 0.0001,
   "atolp": 0.0,
   "eps_s": 0.0001,
-  "atol": 0.0,
-  "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 6.249e-05,
-  "value_rel_error": 5.718e-05,
-  "iterations": 12,
-  "value": 1.3283448113299767,
-  "grad": [
-   -0.1821272153728471,
-   0.13710838768624853,
-   0
-  ],
-  "exact": [
-   -0.1821319180154383,
-   0.13711976851535743,
-   0
-  ]
- },
- {
-  "case": "fixed_point",
-  "label": "rho",
-  "param": 0.5,
-  "tolp": 0.0001,
-  "atolp": 0.0,
-  "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": true,
@@ -430,6 +405,31 @@
   "param": 0.5,
   "tolp": 0.0001,
   "atolp": 0.0,
+  "eps_s": 1e-06,
+  "atol": 0.0,
+  "maxit": 1000000,
+  "trapped": true,
+  "grad_rel_error": null,
+  "value_rel_error": 5.718e-05,
+  "iterations": 12,
+  "value": 1.3283448113299767,
+  "grad": [
+   null,
+   null,
+   null
+  ],
+  "exact": [
+   -0.1821319180154383,
+   0.13711976851535743,
+   0
+  ]
+ },
+ {
+  "case": "fixed_point",
+  "label": "rho",
+  "param": 0.5,
+  "tolp": 0.0001,
+  "atolp": 0.0,
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 1000000,
@@ -464,8 +464,8 @@
   "iterations": 18,
   "value": 1.3282700423788512,
   "grad": [
-   -0.18213184454329434,
-   0.13711959069490662,
+   -0.18213184454329565,
+   0.1371195906949076,
    0
   ],
   "exact": [
@@ -489,8 +489,8 @@
   "iterations": 18,
   "value": 1.3282700423788512,
   "grad": [
-   -0.18213184454329434,
-   0.13711959069490662,
+   -0.18213184454329565,
+   0.1371195906949076,
    0
   ],
   "exact": [
@@ -539,8 +539,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -564,8 +564,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -589,8 +589,8 @@
   "iterations": 25,
   "value": 1.3282688649397703,
   "grad": [
-   -0.1821319174414367,
-   0.1371197671261348,
+   -0.18213191744143795,
+   0.13711976712613574,
    0
   ],
   "exact": [
@@ -609,13 +609,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -634,13 +634,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -659,13 +659,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 5.96e-11,
+  "grad_rel_error": 5.959e-11,
   "value_rel_error": 5.453e-11,
   "iterations": 32,
   "value": 1.3282688557410394,
   "grad": [
-   -0.18213191801095263,
-   0.13711976850450316,
+   -0.182131918010954,
+   0.1371197685045042,
    0
   ],
   "exact": [
@@ -684,13 +684,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -709,13 +709,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -734,13 +734,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.365e-13,
+  "grad_rel_error": 9.31e-13,
   "value_rel_error": 8.521e-13,
   "iterations": 38,
   "value": 1.3282688556697402,
   "grad": [
-   -0.18213191801536693,
-   0.13711976851518687,
+   -0.18213191801536827,
+   0.13711976851518787,
    0
   ],
   "exact": [
@@ -906,6 +906,56 @@
   "tolp": 1e-08,
   "atolp": 0.0,
   "eps_s": 0.0001,
+  "atol": 0.0,
+  "maxit": 200,
+  "trapped": false,
+  "grad_rel_error": 9.819e-08,
+  "value_rel_error": 8.986e-08,
+  "iterations": 144,
+  "value": 1.3282689750220646,
+  "grad": [
+   -0.18213191062597392,
+   0.137119750631041,
+   0
+  ],
+  "exact": [
+   -0.1821319180154383,
+   0.13711976851535743,
+   0
+  ]
+ },
+ {
+  "case": "fixed_point",
+  "label": "rho",
+  "param": 0.9,
+  "tolp": 1e-08,
+  "atolp": 0.0,
+  "eps_s": 1e-06,
+  "atol": 0.0,
+  "maxit": 200,
+  "trapped": false,
+  "grad_rel_error": 9.819e-08,
+  "value_rel_error": 8.986e-08,
+  "iterations": 144,
+  "value": 1.3282689750220646,
+  "grad": [
+   -0.18213191062597392,
+   0.137119750631041,
+   0
+  ],
+  "exact": [
+   -0.1821319180154383,
+   0.13711976851535743,
+   0
+  ]
+ },
+ {
+  "case": "fixed_point",
+  "label": "rho",
+  "param": 0.9,
+  "tolp": 1e-08,
+  "atolp": 0.0,
+  "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
   "trapped": true,
@@ -928,70 +978,20 @@
   "case": "fixed_point",
   "label": "rho",
   "param": 0.9,
-  "tolp": 1e-08,
-  "atolp": 0.0,
-  "eps_s": 1e-06,
-  "atol": 0.0,
-  "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
-  "value_rel_error": 8.986e-08,
-  "iterations": 144,
-  "value": 1.3282689750220646,
-  "grad": [
-   null,
-   null,
-   null
-  ],
-  "exact": [
-   -0.1821319180154383,
-   0.13711976851535743,
-   0
-  ]
- },
- {
-  "case": "fixed_point",
-  "label": "rho",
-  "param": 0.9,
-  "tolp": 1e-08,
-  "atolp": 0.0,
-  "eps_s": 1e-08,
-  "atol": 0.0,
-  "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
-  "value_rel_error": 8.986e-08,
-  "iterations": 144,
-  "value": 1.3282689750220646,
-  "grad": [
-   null,
-   null,
-   null
-  ],
-  "exact": [
-   -0.1821319180154383,
-   0.13711976851535743,
-   0
-  ]
- },
- {
-  "case": "fixed_point",
-  "label": "rho",
-  "param": 0.9,
   "tolp": 1e-10,
   "atolp": 0.0,
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.523e-10,
   "value_rel_error": 8.714e-10,
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   null,
-   null,
-   null
+   -0.1821319179437775,
+   0.13711976834192022,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1008,15 +1008,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.523e-10,
   "value_rel_error": 8.714e-10,
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   null,
-   null,
-   null
+   -0.1821319179437775,
+   0.13711976834192022,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1033,15 +1033,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.523e-10,
   "value_rel_error": 8.714e-10,
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   null,
-   null,
-   null
+   -0.1821319179437775,
+   0.13711976834192022,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1058,15 +1058,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191801474304,
+   0.13711976851367527,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1083,15 +1083,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191801474304,
+   0.13711976851367527,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1108,15 +1108,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191801474304,
+   0.13711976851367527,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1133,15 +1133,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.0009396,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 0.0008605,
   "iterations": 57,
   "value": 1.329411833900835,
   "grad": [
-   -0.18206114399845555,
-   0.1369486410123502,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1208,15 +1208,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 9.113e-06,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 8.339e-06,
   "iterations": 101,
   "value": 1.3282799323581211,
   "grad": [
-   -0.18213123222960192,
-   0.137118108760599,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1233,15 +1233,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 9.113e-06,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 8.339e-06,
   "iterations": 101,
   "value": 1.3282799323581211,
   "grad": [
-   -0.18213123222960192,
-   0.137118108760599,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1289,8 +1289,8 @@
   "iterations": 144,
   "value": 1.3282689750220646,
   "grad": [
-   -0.18213191062595735,
-   0.13711975063102852,
+   -0.18213191062597392,
+   0.137119750631041,
    0
   ],
   "exact": [
@@ -1314,8 +1314,8 @@
   "iterations": 144,
   "value": 1.3282689750220646,
   "grad": [
-   -0.18213191062595735,
-   0.13711975063102852,
+   -0.18213191062597392,
+   0.137119750631041,
    0
   ],
   "exact": [
@@ -1333,15 +1333,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 9.819e-08,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 8.986e-08,
   "iterations": 144,
   "value": 1.3282689750220646,
   "grad": [
-   -0.18213191062595735,
-   0.13711975063102852,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1364,8 +1364,8 @@
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   -0.18213191794376227,
-   0.13711976834190875,
+   -0.1821319179437775,
+   0.13711976834192022,
    0
   ],
   "exact": [
@@ -1389,8 +1389,8 @@
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   -0.18213191794376227,
-   0.13711976834190875,
+   -0.1821319179437775,
+   0.13711976834192022,
    0
   ],
   "exact": [
@@ -1414,8 +1414,8 @@
   "iterations": 188,
   "value": 1.328268856826067,
   "grad": [
-   -0.18213191794376227,
-   0.13711976834190875,
+   -0.1821319179437775,
+   0.13711976834192022,
    0
   ],
   "exact": [
@@ -1434,13 +1434,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.303e-12,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   -0.1821319180147269,
-   0.1371197685136631,
+   -0.18213191801474304,
+   0.13711976851367527,
    0
   ],
   "exact": [
@@ -1459,13 +1459,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.303e-12,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   -0.1821319180147269,
-   0.1371197685136631,
+   -0.18213191801474304,
+   0.13711976851367527,
    0
   ],
   "exact": [
@@ -1484,13 +1484,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 9.303e-12,
+  "grad_rel_error": 9.236e-12,
   "value_rel_error": 8.451e-12,
   "iterations": 232,
   "value": 1.3282688556798332,
   "grad": [
-   -0.1821319180147269,
-   0.1371197685136631,
+   -0.18213191801474304,
+   0.13711976851367527,
    0
   ],
   "exact": [
@@ -1733,15 +1733,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.077e-08,
   "value_rel_error": 9.858e-09,
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191720474517,
+   0.13711976655328503,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1758,15 +1758,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.077e-08,
   "value_rel_error": 9.858e-09,
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191720474517,
+   0.13711976655328503,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1783,15 +1783,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.077e-08,
   "value_rel_error": 9.858e-09,
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191720474517,
+   0.13711976655328503,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1808,15 +1808,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   null,
-   null,
-   null
+   -0.182131918007316,
+   0.13711976849569646,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1833,15 +1833,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   null,
-   null,
-   null
+   -0.182131918007316,
+   0.13711976849569646,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1858,15 +1858,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   null,
-   null,
-   null
+   -0.182131918007316,
+   0.13711976849569646,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -1883,15 +1883,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.01068,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 0.009867,
   "iterations": 359,
   "value": 1.3413744020307174,
   "grad": [
-   -0.18131934813904543,
-   0.1351743017195979,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1958,15 +1958,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.0001073,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.817e-05,
   "iterations": 817,
   "value": 1.3283992534633704,
   "grad": [
-   -0.18212384464554127,
-   0.13710023110199165,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -1983,15 +1983,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.0001073,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.817e-05,
   "iterations": 817,
   "value": 1.3283992534633704,
   "grad": [
-   -0.18212384464554127,
-   0.13710023110199165,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2033,15 +2033,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.075e-06,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.837e-07,
   "iterations": 1275,
   "value": 1.328270162316075,
   "grad": [
-   -0.1821318371175095,
-   0.13711957272301462,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2058,15 +2058,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.075e-06,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.837e-07,
   "iterations": 1275,
   "value": 1.328270162316075,
   "grad": [
-   -0.1821318371175095,
-   0.13711957272301462,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2083,15 +2083,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.075e-06,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.837e-07,
   "iterations": 1275,
   "value": 1.328270162316075,
   "grad": [
-   -0.1821318371175095,
-   0.13711957272301462,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2114,8 +2114,8 @@
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   -0.18213191720456878,
-   0.13711976655315222,
+   -0.18213191720474517,
+   0.13711976655328503,
    0
   ],
   "exact": [
@@ -2139,8 +2139,8 @@
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   -0.18213191720456878,
-   0.13711976655315222,
+   -0.18213191720474517,
+   0.13711976655328503,
    0
   ],
   "exact": [
@@ -2164,8 +2164,8 @@
   "iterations": 1733,
   "value": 1.3282688687627566,
   "grad": [
-   -0.18213191720456878,
-   0.13711976655315222,
+   -0.18213191720474517,
+   0.13711976655328503,
    0
   ],
   "exact": [
@@ -2184,13 +2184,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.087e-10,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   -0.18213191800713693,
-   0.13711976849556165,
+   -0.182131918007316,
+   0.13711976849569646,
    0
   ],
   "exact": [
@@ -2209,13 +2209,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.087e-10,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   -0.18213191800713693,
-   0.13711976849556165,
+   -0.182131918007316,
+   0.13711976849569646,
    0
   ],
   "exact": [
@@ -2234,13 +2234,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.087e-10,
+  "grad_rel_error": 1.079e-10,
   "value_rel_error": 9.879e-11,
   "iterations": 2191,
   "value": 1.3282688557998277,
   "grad": [
-   -0.18213191800713693,
-   0.13711976849556165,
+   -0.182131918007316,
+   0.13711976849569646,
    0
   ],
   "exact": [
@@ -2558,15 +2558,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191793327052,
+   0.13711976831654044,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -2583,15 +2583,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191793327052,
+   0.13711976831654044,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -2608,15 +2608,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": true,
-  "grad_rel_error": null,
+  "trapped": false,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   null,
-   null,
-   null
+   -0.18213191793327052,
+   0.13711976831654044,
+   0
   ],
   "exact": [
    -0.1821319180154383,
@@ -2633,15 +2633,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.1016,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 0.1022,
   "iterations": 1338,
   "value": 1.4640649173221032,
   "grad": [
-   -0.1736637409875791,
-   0.1186175141094321,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2708,15 +2708,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.001091,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 0.0009989,
   "iterations": 5892,
   "value": 1.3295957028994634,
   "grad": [
-   -0.18204975694668557,
-   0.13692113816981188,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2733,15 +2733,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 0.001091,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 0.0009989,
   "iterations": 5892,
   "value": 1.3295957028994634,
   "grad": [
-   -0.18204975694668557,
-   0.13692113816981188,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2783,15 +2783,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.091e-05,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.981e-06,
   "iterations": 10495,
   "value": 1.328282112852053,
   "grad": [
-   -0.18213109722772466,
-   0.13711778203250624,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2808,15 +2808,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.091e-05,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.981e-06,
   "iterations": 10495,
   "value": 1.328282112852053,
   "grad": [
-   -0.18213109722772466,
-   0.13711778203250624,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2833,15 +2833,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.091e-05,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.981e-06,
   "iterations": 10495,
   "value": 1.328282112852053,
   "grad": [
-   -0.18213109722772466,
-   0.13711778203250624,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2858,15 +2858,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.092e-07,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.989e-08,
   "iterations": 15097,
   "value": 1.3282689883545655,
   "grad": [
-   -0.182131909798711,
-   0.1371197486318886,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2883,15 +2883,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.092e-07,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.989e-08,
   "iterations": 15097,
   "value": 1.3282689883545655,
   "grad": [
-   -0.182131909798711,
-   0.1371197486318886,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2908,15 +2908,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 1000000,
-  "trapped": false,
-  "grad_rel_error": 1.092e-07,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 9.989e-08,
   "iterations": 15097,
   "value": 1.3282689883545655,
   "grad": [
-   -0.182131909798711,
-   0.1371197486318886,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    -0.1821319180154383,
@@ -2934,13 +2934,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.099e-09,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   -0.18213191793149555,
-   0.13711976831520414,
+   -0.18213191793327052,
+   0.13711976831654044,
    0
   ],
   "exact": [
@@ -2959,13 +2959,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.099e-09,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   -0.18213191793149555,
-   0.13711976831520414,
+   -0.18213191793327052,
+   0.13711976831654044,
    0
   ],
   "exact": [
@@ -2984,13 +2984,13 @@
   "atol": 0.0,
   "maxit": 1000000,
   "trapped": false,
-  "grad_rel_error": 1.099e-09,
+  "grad_rel_error": 1.092e-09,
   "value_rel_error": 9.988e-10,
   "iterations": 19700,
   "value": 1.3282688569952927,
   "grad": [
-   -0.18213191793149555,
-   0.13711976831520414,
+   -0.18213191793327052,
+   0.13711976831654044,
    0
   ],
   "exact": [
@@ -3384,13 +3384,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 3.326e-11,
+  "grad_rel_error": 3.325e-11,
   "value_rel_error": 7.055e-11,
   "iterations": 33,
   "value": 0.4533976515483899,
   "grad": [
-   -0.17327023155686896,
-   0.38215952589330143,
+   -0.1732702315568701,
+   0.3821595258933039,
    0
   ],
   "exact": [
@@ -3409,13 +3409,13 @@
   "atol": 1e-12,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 3.326e-11,
+  "grad_rel_error": 3.325e-11,
   "value_rel_error": 7.055e-11,
   "iterations": 33,
   "value": 0.4533976515483899,
   "grad": [
-   -0.17327023155686896,
-   0.38215952589330143,
+   -0.1732702315568701,
+   0.3821595258933039,
    0
   ],
   "exact": [
@@ -3434,13 +3434,13 @@
   "atol": 1e-09,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 3.326e-11,
+  "grad_rel_error": 3.325e-11,
   "value_rel_error": 7.055e-11,
   "iterations": 33,
   "value": 0.4533976515483899,
   "grad": [
-   -0.17327023155686896,
-   0.38215952589330143,
+   -0.1732702315568701,
+   0.3821595258933039,
    0
   ],
   "exact": [
@@ -3464,8 +3464,8 @@
   "iterations": 39,
   "value": 5.000000080989748e-05,
   "grad": [
-   -2.5000000311198554e-05,
-   0.4999999981249963,
+   -2.500000031119873e-05,
+   0.49999999812499984,
    0
   ],
   "exact": [
@@ -3489,8 +3489,8 @@
   "iterations": 39,
   "value": 5.000000080989748e-05,
   "grad": [
-   -2.5000000311198554e-05,
-   0.4999999981249963,
+   -2.500000031119873e-05,
+   0.49999999812499984,
    0
   ],
   "exact": [
@@ -3514,8 +3514,8 @@
   "iterations": 39,
   "value": 5.000000080989748e-05,
   "grad": [
-   -2.5000000311198554e-05,
-   0.4999999981249963,
+   -2.500000031119873e-05,
+   0.49999999812499984,
    0
   ],
   "exact": [
@@ -3564,8 +3564,8 @@
   "iterations": 39,
   "value": 5.000872509842966e-09,
   "grad": [
-   -2.500436254921465e-09,
-   0.49999999999999645,
+   -2.500436254921483e-09,
+   0.5,
    0
   ],
   "exact": [
@@ -3589,8 +3589,8 @@
   "iterations": 39,
   "value": 5.000872509842966e-09,
   "grad": [
-   -2.500436254921465e-09,
-   0.49999999999999645,
+   -2.500436254921483e-09,
+   0.5,
    0
   ],
   "exact": [
@@ -3639,8 +3639,8 @@
   "iterations": 39,
   "value": 8.725098542048226e-13,
   "grad": [
-   -4.362549271024082e-13,
-   0.49999999999999645,
+   -4.362549271024113e-13,
+   0.5,
    0
   ],
   "exact": [
@@ -3664,8 +3664,8 @@
   "iterations": 39,
   "value": 8.725098542048226e-13,
   "grad": [
-   -4.362549271024082e-13,
-   0.49999999999999645,
+   -4.362549271024113e-13,
+   0.5,
    0
   ],
   "exact": [
@@ -3759,13 +3759,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 0.0,
+  "grad_rel_error": 2.22e-16,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 4.99999999375e-05,
   "grad": [
-   -2.4999999875e-05,
-   0.49999999812499996,
+   -2.4999999875000005e-05,
+   0.49999999812500007,
    0
   ],
   "exact": [
@@ -3784,13 +3784,13 @@
   "atol": 1e-12,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 0.0,
+  "grad_rel_error": 2.22e-16,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 4.99999999375e-05,
   "grad": [
-   -2.4999999875e-05,
-   0.49999999812499996,
+   -2.4999999875000005e-05,
+   0.49999999812500007,
    0
   ],
   "exact": [
@@ -3809,13 +3809,13 @@
   "atol": 1e-09,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 0.0,
+  "grad_rel_error": 2.22e-16,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 4.99999999375e-05,
   "grad": [
-   -2.4999999875e-05,
-   0.49999999812499996,
+   -2.4999999875000005e-05,
+   0.49999999812500007,
    0
   ],
   "exact": [
@@ -4208,15 +4208,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 6.103e-05,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 5.549e-06,
   "iterations": 0,
   "value": 1.100006103515625,
   "grad": [
-   4.999694842844065,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    5,
@@ -4658,15 +4658,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.00208,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 2.055e-05,
   "iterations": 0,
   "value": 1.009979248046875,
   "grad": [
-   50.103975535168196,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    50,
@@ -4889,7 +4889,7 @@
   "iterations": 0,
   "value": 1.0001078459475072,
   "grad": [
-   4985.770512613396,
+   4985.770512613397,
    0,
    0
   ],
@@ -5034,12 +5034,12 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 1.819e-16,
+  "grad_rel_error": 0.0,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 1.0001,
   "grad": [
-   4999.999999999999,
+   5000,
    0,
    0
   ],
@@ -5059,12 +5059,12 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 1.819e-16,
+  "grad_rel_error": 0.0,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 1.0001,
   "grad": [
-   4999.999999999999,
+   5000,
    0,
    0
   ],
@@ -5084,12 +5084,12 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 1.819e-16,
+  "grad_rel_error": 0.0,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": 1.0001,
   "grad": [
-   4999.999999999999,
+   5000,
    0,
    0
   ],
@@ -5108,15 +5108,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.09227,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 8.446e-06,
   "iterations": 0,
   "value": 1.000091552734375,
   "grad": [
-   5461.333333333333,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    5000,
@@ -5333,15 +5333,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.9672,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 6.004e-05,
   "iterations": 0,
   "value": 1.0000610406174855,
   "grad": [
-   16378.138455523313,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    500000,
@@ -5558,15 +5558,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.9672,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 2.952e-05,
   "iterations": 0,
   "value": 1.000030517578125,
   "grad": [
-   16384,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    500000,
@@ -5633,15 +5633,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.002099,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 2.103e-09,
   "iterations": 0,
   "value": 1.0000010021030903,
   "grad": [
-   498950.66171003715,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    500000,
@@ -5658,15 +5658,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.002099,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 2.103e-09,
   "iterations": 0,
   "value": 1.0000010021030903,
   "grad": [
-   498950.66171003715,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    500000,
@@ -5683,15 +5683,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": 0.002099,
+  "trapped": true,
+  "grad_rel_error": null,
   "value_rel_error": 2.103e-09,
   "iterations": 0,
   "value": 1.0000010021030903,
   "grad": [
-   498950.66171003715,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    500000,
@@ -5783,15 +5783,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 6.104e-05,
   "iterations": 0,
   "value": 1.00006103515625,
   "grad": [
-   16383.999999999884,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5858,15 +5858,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 7.451e-09,
   "iterations": 0,
   "value": 1.0000000074505806,
   "grad": [
-   134217727.99999905,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5883,15 +5883,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 7.451e-09,
   "iterations": 0,
   "value": 1.0000000074505806,
   "grad": [
-   134217727.99999905,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5908,15 +5908,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 7.451e-09,
   "iterations": 0,
   "value": 1.0000000074505806,
   "grad": [
-   134217727.99999905,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5933,15 +5933,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 9.095e-13,
   "iterations": 0,
   "value": 1.0000000000009095,
   "grad": [
-   1099511627775.9922,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5958,15 +5958,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 9.095e-13,
   "iterations": 0,
   "value": 1.0000000000009095,
   "grad": [
-   1099511627775.9922,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -5983,15 +5983,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 9.095e-13,
   "iterations": 0,
   "value": 1.0000000000009095,
   "grad": [
-   1099511627775.9922,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6006,31 +6006,6 @@
   "tolp": 0.0001,
   "atolp": 0.0,
   "eps_s": 0.0001,
-  "atol": 0.0,
-  "maxit": 200,
-  "trapped": false,
-  "grad_rel_error": null,
-  "value_rel_error": 3.052e-05,
-  "iterations": 0,
-  "value": 1.000030517578125,
-  "grad": [
-   16384,
-   0,
-   0
-  ],
-  "exact": [
-   null,
-   0,
-   0
-  ]
- },
- {
-  "case": "double_root_bisection",
-  "label": "d",
-  "param": 0,
-  "tolp": 0.0001,
-  "atolp": 0.0,
-  "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
   "trapped": true,
@@ -6055,6 +6030,31 @@
   "param": 0,
   "tolp": 0.0001,
   "atolp": 0.0,
+  "eps_s": 1e-06,
+  "atol": 0.0,
+  "maxit": 200,
+  "trapped": true,
+  "grad_rel_error": null,
+  "value_rel_error": 3.052e-05,
+  "iterations": 0,
+  "value": 1.000030517578125,
+  "grad": [
+   null,
+   null,
+   null
+  ],
+  "exact": [
+   null,
+   0,
+   0
+  ]
+ },
+ {
+  "case": "double_root_bisection",
+  "label": "d",
+  "param": 0,
+  "tolp": 0.0001,
+  "atolp": 0.0,
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
@@ -6083,15 +6083,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 3.725e-09,
   "iterations": 0,
   "value": 1.0000000037252903,
   "grad": [
-   134217728,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6108,15 +6108,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 3.725e-09,
   "iterations": 0,
   "value": 1.0000000037252903,
   "grad": [
-   134217728,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6133,15 +6133,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 3.725e-09,
   "iterations": 0,
   "value": 1.0000000037252903,
   "grad": [
-   134217728,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6158,15 +6158,15 @@
   "eps_s": 0.0001,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 4.547e-13,
   "iterations": 0,
   "value": 1.0000000000004547,
   "grad": [
-   1099511627776,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6183,15 +6183,15 @@
   "eps_s": 1e-06,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 4.547e-13,
   "iterations": 0,
   "value": 1.0000000000004547,
   "grad": [
-   1099511627776,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6208,15 +6208,15 @@
   "eps_s": 1e-08,
   "atol": 0.0,
   "maxit": 200,
-  "trapped": false,
+  "trapped": true,
   "grad_rel_error": null,
   "value_rel_error": 4.547e-13,
   "iterations": 0,
   "value": 1.0000000000004547,
   "grad": [
-   1099511627776,
-   0,
-   0
+   null,
+   null,
+   null
   ],
   "exact": [
    null,
@@ -6259,13 +6259,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 4.626e-17,
+  "grad_rel_error": 1.85e-16,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": -3,
   "grad": [
-   0.15,
-   -0.049999999999999996,
+   0.15000000000000002,
+   -0.05,
    0
   ],
   "exact": [
@@ -6334,13 +6334,13 @@
   "atol": 0.0,
   "maxit": 200,
   "trapped": false,
-  "grad_rel_error": 4.626e-17,
+  "grad_rel_error": 1.85e-16,
   "value_rel_error": 0.0,
   "iterations": 0,
   "value": -3,
   "grad": [
-   0.15,
-   -0.049999999999999996,
+   0.15000000000000002,
+   -0.05,
    0
   ],
   "exact": [

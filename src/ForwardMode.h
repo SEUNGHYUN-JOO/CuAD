@@ -20,6 +20,7 @@
 #pragma once
 #include "Activity.h"
 #include "Diag.h"
+#include "ReverseMode.h" // the analysis of convergence loops is shared with the reverse mode
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
@@ -49,11 +50,13 @@ class ForwardMode {
   mutable std::string pre_;
   mutable std::string curInd_;
   mutable int callTmp_ = 0;
+  ReverseMode An_;          // convergence-loop analysis (shared with the reverse mode)
+  mutable int implicitId_ = 0;
 
 public:
   explicit ForwardMode(ASTContext &C)
       : Ctx(C), SM(C.getSourceManager()), LO(C.getLangOpts()),
-        PP(C.getPrintingPolicy()) {
+        PP(C.getPrintingPolicy()), An_(C) {
     PP.SuppressTagKeyword = true;
   }
 
@@ -61,6 +64,7 @@ public:
   std::string genFunction(const FunctionDecl *FD) {
     Act = Activity();
     Act.run(FD);
+    An_.prepareSolveAnalysis(FD);
     std::string out;
     // CUDA qualifier recovered from the annotate() macro trick in main.cpp
     for (const auto *a : FD->specific_attrs<AnnotateAttr>()) {
@@ -119,7 +123,8 @@ private:
   // A loop that leaves with `break` and assigns floating variables declared before it, none of them from a
   // value that depends on the active inputs by data flow within one iteration, while a branch condition
   // in it does (a bisection). Its result converges to a function of the inputs, but the tangent of its
-  // iterations only carries the tangent of the starting values.
+  // iterations only carries the tangent of the starting values. A bisection of the supported form receives an
+  // implicit tangent (implicitTangent); one outside it is rejected through this test.
   static bool fwdHasBreak(const Stmt *s) {
     if (!s)
       return false;
@@ -568,8 +573,319 @@ private:
 
   // ---------- statement transformation ----------
   // Leaf statements collect hoisted tangent calls (pre_) and emit them first.
+  // ---------- implicit tangents of convergence loops ----------
+  // The loop runs as written. Its tangent follows from the equation it solves (see ReverseMode::SolveInfo):
+  //  - smooth update x* = G(x*, p): (I - G_x) x' = G_p p', with G_x and G_p p' from tangent sweeps of one iteration;
+  //  - bracketing loop: the root t of r(m, p) has t' = -r_p p' / r_m (or the tangent of a bound that never moved);
+  //  - several iterated variables: the root of the residual found in the loop, t' = -R_p p' / R_t.
+  // The exit state must lie within CUAD_SOLVE_TOL of a solution, and the tangent must not change across the
+  // interval in which the solution is known (CUAD_SOLVE_AGREE); otherwise the kernel traps.
+  std::string primalOnly(const Stmt *s, const std::string &ind) const {
+    std::string t = src(s->getSourceRange());
+    while (!t.empty() && (t.back() == ' ' || t.back() == '\n'))
+      t.pop_back();
+    if (!t.empty() && t.back() != ';' && t.back() != '}')
+      t += ";";
+    return ind + t + "\n";
+  }
+  // the tangent of expression e as a statement `into = ...;` (calls in it hoisted before)
+  std::string tangentInto(const Expr *e, const std::string &into, const std::string &ind) const {
+    std::string savedPre = pre_, savedInd = curInd_;
+    pre_.clear();
+    curInd_ = ind;
+    std::string d = diff(e);
+    std::string out = pre_ + ind + into + " = " + d + ";\n";
+    pre_ = savedPre;
+    curInd_ = savedInd;
+    return out;
+  }
+  std::string declOf(const VarDecl *v) const { return tstr(v->getType().getNonReferenceType().getUnqualifiedType()); }
+
+  std::string implicitTangent(const Stmt *loop, const ReverseMode::SolveInfo &si, int depth) const {
+    const std::string ind(depth * 2, ' '), i1 = ind + "  ", i2 = i1 + "  ", i3 = i2 + "  ";
+    const std::string id = std::to_string(implicitId_++);
+    const std::string line = std::to_string(SM.getSpellingLineNumber(loop->getBeginLoc()));
+    std::string out = ind + src(loop->getSourceRange());
+    if (isa<DoStmt>(loop) || !isa<CompoundStmt>(ReverseMode::loopBody(loop)))
+      out += ";";
+    out += "\n";
+    std::string shadowP0;
+    for (const VarDecl *p : si.params)
+      shadowP0 += i2 + declOf(p) + " " + p->getNameAsString() + "_d = 0;\n";
+    if (!si.bracket && !si.residual) {
+      const size_t K = si.comps.size();
+      const std::string Ks = std::to_string(K);
+      const std::string X = "_cuad_x" + id, R = "_cuad_r" + id, J = "_cuad_J" + id, B = "_cuad_B" + id,
+                        M = "_cuad_M" + id, D = "_cuad_dd" + id, W = "_cuad_w" + id, W2 = "_cuad_v" + id;
+      out += ind + "{ // cuad: implicit tangent of the convergence loop at line " + line +
+             ": (I - G_x) x' = G_p p' solved directly\n";
+      std::string xInit;
+      for (size_t k = 0; k < K; ++k)
+        xInit += std::string(k ? ", " : "") + "(double)" + si.comps[k].x;
+      out += i1 + "double " + X + "[" + Ks + "] = {" + xInit + "}, " + R + "[" + Ks + "], " + J + "[" + Ks + "][" + Ks +
+             "], " + B + "[" + Ks + "], " + M + "[" + Ks + "][" + Ks + "], " + D + "[" + Ks + "], " + W + "[" + Ks + "], " +
+             W2 + "[" + Ks + "];\n";
+      // one more iteration from the exit state (primal only): G(x) - x (checks only)
+      out += i1 + "if (CUAD_SOLVE_CHECK) {\n";
+      for (const Stmt *s : si.iter)
+        out += primalOnly(s, i2);
+      for (size_t k = 0; k < K; ++k)
+        out += i2 + R + "[" + std::to_string(k) + "] = (double)" + si.comps[k].x + " - " + X + "[" + std::to_string(k) +
+               "];\n";
+      out += i1 + "}\n";
+      for (size_t k = 0; k < K; ++k)
+        out += i1 + si.comps[k].x + " = (" + si.comps[k].T + ")" + X + "[" + std::to_string(k) + "];\n";
+      // a tangent sweep of one iteration from the state `at` with state tangent e_j (j < K) or 0 (j == K, the
+      // parameters' tangents then flow in); the result goes to column j of J or to B
+      auto sweep = [&](size_t j, const std::string &at) {
+        std::string o = i1 + "{\n";
+        size_t k = 0;
+        for (const VarDecl *v : si.state) {
+          std::string x = v->getNameAsString();
+          if (v->getType()->isRealFloatingType()) {
+            o += i2 + declOf(v) + " " + x + " = (" + declOf(v) + ")" + at + "[" + std::to_string(k) + "];\n";
+            o += i2 + declOf(v) + " " + x + "_d = " + (k == j ? "1" : "0") + ";\n";
+            ++k;
+            continue;
+          }
+          QualType elem;
+          std::string dims = arrayDims(v->getType(), elem), vi, di;
+          size_t n = 1;
+          for (QualType qt = v->getType().getCanonicalType(); const auto *cat = Ctx.getAsConstantArrayType(qt);
+               qt = cat->getElementType())
+            n *= cat->getSize().getZExtValue();
+          for (size_t e = 0; e < n; ++e, ++k) {
+            vi += std::string(e ? ", " : "") + "(" + tstr(elem) + ")" + at + "[" + std::to_string(k) + "]";
+            di += std::string(e ? ", " : "") + (k == j ? "1" : "0");
+          }
+          o += i2 + tstr(elem) + " " + x + dims + " = {" + vi + "};\n" + i2 + tstr(elem) + " " + x + "_d" + dims + " = {" +
+               di + "};\n";
+        }
+        if (j < K)
+          o += shadowP0;
+        for (const Stmt *s : si.iter)
+          o += genStmt(s, depth + 2);
+        for (size_t c = 0; c < K; ++c)
+          o += i2 + (j < K ? J + "[" + std::to_string(c) + "][" + std::to_string(j) + "]" : B + "[" + std::to_string(c) + "]") +
+               " = " + si.comps[c].d + ";\n";
+        return o + i1 + "}\n";
+      };
+      auto tangent = [&](const std::string &at, const std::string &into, bool distance) {
+        std::string o;
+        for (size_t j = 0; j <= K; ++j)
+          o += sweep(j, at);
+        if (distance) {
+          o += i1 + "if (CUAD_SOLVE_CHECK) {\n";
+          o += i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks + "; ++_cuad_i) {\n" + i2 + D + "[_cuad_i] = " + R +
+               "[_cuad_i];\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) " + M +
+               "[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - " + J + "[_cuad_i][_cuad_k];\n" + i1 + "}\n";
+          o += i1 + "if (!cuad_lsolve(" + M + ", " + D + ")) cuad_solve_fail();\n";
+          o += i1 + "{\n" + i2 + "double _cuad_dn = 0, _cuad_xn = 0;\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks +
+               "; ++_cuad_k) { _cuad_dn = fmax(_cuad_dn, fabs(" + D + "[_cuad_k])); _cuad_xn = fmax(_cuad_xn, fabs(" + X +
+               "[_cuad_k])); }\n" + i2 +
+               "if (_cuad_dn > CUAD_SOLVE_TOL * _cuad_xn + CUAD_SOLVE_ATOL) cuad_solve_fail();\n" + i1 + "}\n" + i1 + "}\n";
+        }
+        o += i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks + "; ++_cuad_i) {\n" + i2 + into + "[_cuad_i] = " + B +
+             "[_cuad_i];\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) " + M +
+             "[_cuad_i][_cuad_k] = (_cuad_i == _cuad_k) - " + J + "[_cuad_i][_cuad_k];\n" + i1 + "}\n";
+        o += i1 + "if (!cuad_lsolve(" + M + ", " + into + ")) cuad_solve_fail();\n";
+        return o;
+      };
+      out += tangent(X, W, true);
+      out += i1 + "double _cuad_bn" + id + " = 0;\n" + i1 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_bn" +
+             id + " = fmax(_cuad_bn" + id + ", fmax(fabs(" + W + "[_cuad_k]), fabs(" + B + "[_cuad_k])));\n";
+      // the same at the far side of the interval in which the solution is known (skipped where G_x is negligible:
+      // Newton's method at a simple root converges quadratically and its exit state is exact to rounding)
+      out += i1 + "double _cuad_jm" + id + " = 0;\n" + i1 + "for (int _cuad_i = 0; _cuad_i < " + Ks +
+             "; ++_cuad_i) for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_jm" + id + " = fmax(_cuad_jm" + id +
+             ", fabs(" + J + "[_cuad_i][_cuad_k]));\n";
+      out += i1 + "if (CUAD_SOLVE_CHECK && (_cuad_jm" + id + " > 0.25 || !(_cuad_bn" + id + " < 1e300))) {\n";
+      out += i1 + "double _cuad_y" + id + "[" + Ks + "];\n" + i1 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) _cuad_y" +
+             id + "[_cuad_k] = " + X + "[_cuad_k] + " + D + "[_cuad_k] + copysign(4.440892098500626e-16 * fabs(" + X +
+             "[_cuad_k]), " + D + "[_cuad_k]);\n";
+      out += tangent("_cuad_y" + id, W2, false);
+      out += i1 + "{\n" + i2 + "double _cuad_wd = 0;\n" + i2 + "for (int _cuad_k = 0; _cuad_k < " + Ks +
+             "; ++_cuad_k) _cuad_wd = fmax(_cuad_wd, fabs(" + W + "[_cuad_k] - " + W2 + "[_cuad_k]));\n" + i2 +
+             "if (!(_cuad_wd <= CUAD_SOLVE_AGREE * _cuad_bn" + id + ") || !(_cuad_bn" + id +
+             " < 1e300)) cuad_solve_fail();\n" + i1 + "}\n";
+      out += i1 + "}\n";
+      for (size_t k = 0; k < K; ++k)
+        out += i1 + si.comps[k].d + " = (" + si.comps[k].T + ")" + W + "[" + std::to_string(k) + "];\n";
+      return out + ind + "}\n";
+    }
+    if (si.bracket) {
+      const auto *cmp = cast<BinaryOperator>(si.sel->getCond()->IgnoreParenImpCasts());
+      const std::string m = si.trial->getNameAsString(), Tm = declOf(si.trial);
+      std::string lo, hi;
+      for (const VarDecl *v : si.state) {
+        std::string x = "(double)" + v->getNameAsString();
+        lo = lo.empty() ? x : "fmin(" + lo + ", " + x + ")";
+        hi = hi.empty() ? x : "fmax(" + hi + ", " + x + ")";
+      }
+      out += ind + "{ // cuad: implicit tangent of the bracketing loop at line " + line + ": the root of r = (" +
+             prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) + ") in " + m + " moves by -r_p p' / r_" + m + "\n";
+      out += i1 + "if (CUAD_SOLVE_CHECK && " + hi + " - " + lo + " > CUAD_SOLVE_TOL * fmax(fabs(" + hi + "), fabs(" + lo +
+             ")) + CUAD_SOLVE_ATOL) cuad_solve_fail();\n";
+      // the residual, r_m and r_p p' at the point `at`
+      auto eval = [&](const std::string &at, const std::string &r, const std::string &rm, const std::string &rp) {
+        std::string o;
+        for (int pass = 0; pass < 2; ++pass) {
+          o += i1 + "{\n";
+          for (const VarDecl *v : si.state)
+            o += i2 + declOf(v) + " " + v->getNameAsString() + " = (" + declOf(v) + ")(" + at + ");\n";
+          o += primalOnly(si.iter.front(), i2) + i2 + Tm + " " + m + "_d = " + (pass == 0 ? "1" : "0") + ";\n";
+          if (pass == 0)
+            o += shadowP0;
+          for (size_t i = 1; i < si.iter.size(); ++i)
+            if (si.iter[i] != si.sel)
+              o += genStmt(si.iter[i], depth + 2);
+          o += i2 + "double _cuad_t;\n" + tangentInto(cmp->getLHS(), "_cuad_t", i2) + i2 + (pass == 0 ? rm : rp) +
+               " = _cuad_t;\n" + tangentInto(cmp->getRHS(), "_cuad_t", i2) + i2 + (pass == 0 ? rm : rp) + " -= _cuad_t;\n";
+          if (pass == 1 && !r.empty())
+            o += i2 + r + " = (double)((" + prim(cmp->getLHS()) + ") - (" + prim(cmp->getRHS()) + "));\n";
+          o += i1 + "}\n";
+        }
+        return o;
+      };
+      out += i1 + "double _cuad_r" + id + ", _cuad_rm" + id + ", _cuad_rp" + id + ", _cuad_m" + id + " = 0.5 * ((" + lo +
+             ") + (" + hi + "));\n";
+      out += eval("_cuad_m" + id, "_cuad_r" + id, "_cuad_rm" + id, "_cuad_rp" + id);
+      out += i1 + "if (fabs(_cuad_r" + id + ") <= fabs(_cuad_rm" + id + ") * (CUAD_SOLVE_TOL * fabs(_cuad_m" + id +
+             ") + CUAD_SOLVE_ATOL)) {\n";
+      out += i2 + "double _cuad_e" + id + "[2], _cuad_a, _cuad_b;\n" + i2 + "const double _cuad_lo" + id + " = " + lo +
+             ", _cuad_hi" + id + " = " + hi + ";\n";
+      out += i2 + "const double _cuad_t" + id + " = -_cuad_rp" + id + " / _cuad_rm" + id + ";\n";
+      out += i2 + "if (CUAD_SOLVE_CHECK) {\n" + i2 + "_cuad_e" + id + "[0] = -_cuad_rp" + id + " / _cuad_rm" + id + "; // at the midpoint\n";
+      out += eval("_cuad_hi" + id, "", "_cuad_a", "_cuad_b") + i2 + "_cuad_e" + id + "[1] = -_cuad_b / _cuad_a;\n";
+      out += i2 + "{\n" + i3 + "double _cuad_en = fmax(fabs(_cuad_e" + id + "[0]), fabs(_cuad_e" + id + "[1])), _cuad_ed = fabs(_cuad_e" +
+             id + "[0] - _cuad_e" + id + "[1]);\n" + i3 +
+             "if (!(_cuad_ed <= CUAD_SOLVE_AGREE * _cuad_en) || !(_cuad_en < 1e300)) cuad_solve_fail();\n" + i2 + "}\n" + i2 + "}\n";
+      for (const VarDecl *v : si.state)
+        out += i2 + v->getNameAsString() + "_d = _cuad_t" + id + ";\n";
+      // the root is outside the bracket: the result is the bound that never moved, with its own tangent
+      std::set<const VarDecl *> thenSet, elseSet;
+      for (int armI = 0; armI < 2; ++armI) {
+        const Stmt *arm = armI == 0 ? si.sel->getThen() : si.sel->getElse();
+        std::vector<const Stmt *> as;
+        if (const auto *cs = dyn_cast<CompoundStmt>(arm))
+          as.assign(cs->body_begin(), cs->body_end());
+        else
+          as.push_back(arm);
+        for (const Stmt *a : as)
+          if (const auto *bo = dyn_cast<BinaryOperator>(a))
+            if (const auto *l = dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts()))
+              if (const auto *lv = dyn_cast<VarDecl>(l->getDecl()))
+                (armI == 0 ? thenSet : elseSet).insert(lv);
+      }
+      auto pinned = [&](const std::set<const VarDecl *> &moving) {
+        std::string sum;
+        int n = 0;
+        for (const VarDecl *v : si.state)
+          if (!moving.count(v)) {
+            sum += (sum.empty() ? "" : " + ") + v->getNameAsString() + "_d";
+            ++n;
+          }
+        std::string o = i3 + "const double _cuad_f = (" + (sum.empty() ? std::string("0") : sum) + ") / " +
+                        std::to_string(std::max(n, 1)) + ".0;\n";
+        for (const VarDecl *v : si.state)
+          o += i3 + v->getNameAsString() + "_d = _cuad_f;\n";
+        return o;
+      };
+      out += i1 + "} else {\n";
+      out += i2 + "const double _cuad_c = _cuad_m" + id + ";\n" + i2 + "bool _cuad_up;\n" + i2 + "{\n";
+      for (const VarDecl *v : si.state)
+        out += i3 + declOf(v) + " " + v->getNameAsString() + " = (" + declOf(v) + ")_cuad_c;\n";
+      for (size_t i = 0; i < si.iter.size(); ++i)
+        if (si.iter[i] != si.sel)
+          out += primalOnly(si.iter[i], i3);
+      out += i3 + "_cuad_up = (" + prim(si.sel->getCond()) + ");\n" + i2 + "}\n";
+      out += i2 + "if (_cuad_up) {\n" + pinned(thenSet) + i2 + "} else {\n" + pinned(elseSet) + i2 + "}\n";
+      out += i1 + "}\n";
+      return out + ind + "}\n";
+    }
+    // several iterated variables: the residual that vanishes at the exit state
+    const size_t K = si.res.size();
+    const std::string Ks = std::to_string(K);
+    out += ind + "{ // cuad: implicit tangent of the root-finding loop at line " + line +
+           ": t' = -R_p p' / R_t for the residual that vanishes at the exit state, among";
+    for (const auto &r : si.res)
+      out += " " + r.var->getNameAsString() + "(" + r.trialVar->getNameAsString() + ")";
+    out += "\n";
+    const std::string V = "_cuad_v" + id, XK = "_cuad_xk" + id, RK = "_cuad_rk" + id, DK = "_cuad_dk" + id,
+                      RV = "_cuad_rv" + id, use = "_cuad_use" + id;
+    out += i1 + "int " + use + " = -1, " + V + "[" + Ks + "];\n" + i1 + "double " + XK + "[" + Ks + "], " + RK + "[" + Ks +
+           "], " + DK + "[" + Ks + "], " + RV + "[" + Ks + "];\n";
+    // R, R_t and R_p p' of candidate r at its trial point shifted by `shift`
+    auto eval = [&](const ReverseMode::SolveInfo::Residual &r, const std::string &shift, const std::string &R,
+                    const std::string &Rt, const std::string &Rp, const std::string &tAt) {
+      std::string o;
+      const std::string t = r.trialVar->getNameAsString(), Tt = declOf(r.trialVar);
+      for (int pass = 0; pass < 2; ++pass) {
+        o += i2 + "{\n";
+        for (const Stmt *s : r.trialDecls)
+          o += primalOnly(s, i3);
+        o += i3 + "const double _cuad_tt = (double)" + t + shift + ";\n";
+        if (pass == 0 && !tAt.empty())
+          o += i3 + tAt + " = _cuad_tt;\n";
+        o += i3 + "{\n" + i3 + "  " + Tt + " " + t + " = (" + Tt + ")_cuad_tt;\n" + i3 + "  " + Tt + " " + t + "_d = " +
+             (pass == 0 ? "1" : "0") + ";\n";
+        if (pass == 0)
+          for (const VarDecl *p : si.params)
+            o += i3 + "  " + declOf(p) + " " + p->getNameAsString() + "_d = 0;\n";
+        for (const Stmt *s : r.slice)
+          o += genStmt(s, depth + 4);
+        o += tangentInto(r.expr, pass == 0 ? Rt : Rp, i3 + "  ");
+        if (pass == 1 && !R.empty())
+          o += i3 + "  " + R + " = (double)(" + prim(r.expr) + ");\n";
+        o += i3 + "}\n" + i2 + "}\n";
+      }
+      return o;
+    };
+    for (size_t k = 0; k < K; ++k) {
+      const std::string kk = std::to_string(k);
+      out += i1 + "{ // candidate " + si.res[k].var->getNameAsString() + "(" + si.res[k].trialVar->getNameAsString() + ")\n";
+      out += i2 + "double _cuad_R, _cuad_Rt, _cuad_Rp, _cuad_X;\n";
+      out += eval(si.res[k], "", "_cuad_R", "_cuad_Rt", "_cuad_Rp", "_cuad_X");
+      out += i2 + V + "[" + kk + "] = _cuad_Rt != 0 && fabs(_cuad_R) <= fabs(_cuad_Rt) * (CUAD_SOLVE_TOL * fabs(_cuad_X) + "
+             "CUAD_SOLVE_ATOL);\n";
+      out += i2 + XK + "[" + kk + "] = _cuad_X; " + RK + "[" + kk + "] = _cuad_Rt; " + RV + "[" + kk + "] = _cuad_R; " + DK +
+             "[" + kk + "] = -_cuad_Rp / _cuad_Rt;\n" + i1 + "}\n";
+    }
+    out += i1 + "for (int _cuad_k = 0; _cuad_k < " + Ks + "; ++_cuad_k) {\n" + i2 + "if (!" + V + "[_cuad_k]) continue;\n" +
+           i2 + "if (" + use + " < 0) { " + use + " = _cuad_k; continue; }\n" + i2 + "if (fabs(" + XK + "[_cuad_k] - " + XK +
+           "[" + use + "]) > CUAD_SOLVE_AGREE * fmax(fabs(" + XK + "[_cuad_k]), fabs(" + XK + "[" + use +
+           "])) + CUAD_SOLVE_ATOL || fabs(" + DK + "[_cuad_k] - " + DK + "[" + use + "]) > CUAD_SOLVE_AGREE * fmax(fabs(" +
+           DK + "[_cuad_k]), fabs(" + DK + "[" + use + "]))) cuad_solve_fail();\n" + i1 + "}\n";
+    out += i1 + "if (" + use + " < 0) cuad_solve_fail();\n";
+    // conditioning of the chosen root, then the tangents of the iterated variables
+    for (size_t k = 0; k < K; ++k) {
+      const auto &r = si.res[k];
+      const std::string kk = std::to_string(k);
+      out += i1 + "if (" + use + " == " + kk + ") {\n" + i2 + "if (CUAD_SOLVE_CHECK) {\n" + i2 + "double _cuad_R, _cuad_Rt, _cuad_Rp;\n";
+      out += eval(r, " + fabs(" + RV + "[" + kk + "] / " + RK + "[" + kk + "]) + 4.440892098500626e-16 * fabs((double)" +
+                         r.trialVar->getNameAsString() + ")",
+                  "", "_cuad_Rt", "_cuad_Rp", "");
+      out += i2 + "{\n" + i3 + "double _cuad_e = -_cuad_Rp / _cuad_Rt, _cuad_en = fmax(fabs(_cuad_e), fabs(" + DK + "[" + kk +
+             "]));\n" + i3 + "if (!(fabs(_cuad_e - " + DK + "[" + kk +
+             "]) <= CUAD_SOLVE_AGREE * _cuad_en) || !(_cuad_en < 1e300)) cuad_solve_fail();\n" + i2 + "}\n" + i2 + "}\n";
+      for (const VarDecl *v : si.state) {
+        std::string x = v->getNameAsString(), held;
+        for (size_t c = 0; c < K; ++c)
+          if (si.res[c].var == v)
+            held += (held.empty() ? "" : " || ") + V + "[" + std::to_string(c) + "]";
+        out += i2 + "if (fabs((double)" + x + " - " + XK + "[" + kk + "]) <= CUAD_SOLVE_TOL * fabs(" + XK + "[" + kk +
+               "]) + CUAD_SOLVE_ATOL) " + x + "_d = " + DK + "[" + kk + "];\n";
+        if (!held.empty())
+          out += i2 + "else if (" + held + ") " + x + "_d = 0;\n";
+        out += i2 + "else " + x + "_d = __builtin_nan(\"\"); // not a function of the root: its tangent is undefined\n";
+      }
+      out += i1 + "}\n";
+    }
+    return out + ind + "}\n";
+  }
+
   std::string genStmt(const Stmt *s, int depth) const {
-    if (isa<CompoundStmt>(s) || isa<ForStmt>(s) || isa<IfStmt>(s) || isa<WhileStmt>(s))
+    if (isa<CompoundStmt>(s) || isa<ForStmt>(s) || isa<IfStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s))
       return genStmtInner(s, depth);
     std::string savedPre = pre_, savedInd = curInd_;
     pre_.clear();
@@ -617,6 +933,17 @@ private:
       if (bo->isAssignmentOp())
         return genAssign(bo, ind);
 
+    if (isa<ForStmt>(s) || isa<WhileStmt>(s) || isa<DoStmt>(s)) {
+      const ReverseMode::SolveInfo &si = An_.convergenceLoop(s);
+      if (si.ok)
+        return implicitTangent(s, si, depth);
+    }
+    if (const auto *dw = dyn_cast<DoStmt>(s)) {
+      std::string out = ind + "do {\n";
+      if (dw->getBody())
+        out += genStmt(dw->getBody(), depth + 1);
+      return out + ind + "} while (" + prim(dw->getCond()) + ");\n";
+    }
     if (const auto *fs = dyn_cast<ForStmt>(s)) {
       if (controlOnlyLoop(fs))
         unsupported(fs->getBeginLoc(),

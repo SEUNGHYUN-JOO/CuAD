@@ -81,7 +81,7 @@
 % three lanes: class | run-time check | implicit adjoint
 \def\lx{9.3} \def\lw{7.7}
 \foreach \y/\c/\n/\title/\rel/\ex/\chk/\adj in {
-  9.1/cI/I/smooth update/{$x\leftarrow G(x,p)$}/{Newton $\cdot$ fixed point}/{one more iteration\\ moves less than $\epsilon_s$}/{$\lambda=\bar x+G_x^{\!\top}\lambda$\\[1pt] $\bar p\mathrel{+}=G_p^{\!\top}\lambda$},
+  9.1/cI/I/smooth update/{$x\leftarrow G(x,p)$}/{Newton $\cdot$ fixed point}/{distance to the\\ fixed point below $\epsilon_s$}/{$(I-G_x)^{\!\top}\lambda=\bar x$\\[1pt] $\bar p\mathrel{+}=G_p^{\!\top}\lambda$},
   7.6/cII/II/bracketing/{branch on $r(m,p)$}/{bisection}/{bounds collapsed\\ and $r(m)=0$}/{$\bar p\mathrel{-}=r_p\,s/r_m$},
   6.1/cIII/III/several states/{residual $R(t,p)$ found}/{secant $\cdot$ Illinois $\cdot$ Brent}/{residual vanishes\\ candidates agree}/{$\bar p\mathrel{-}=R_p\,s/R_t$}} {
   \draw[lane, draw=black, fill=white] (\lx,\y-0.65) rectangle ++(\lw,1.3);
@@ -90,7 +90,7 @@
     {\textbf{\title}\\[1pt] \rel\\[1pt] {\color{muted}\itshape\tiny \ex}};
   \draw[line width=0.5pt, draw=black!40] (\lx+3.38,\y-0.47) -- (\lx+3.38,\y+0.47);
   \node[cell, anchor=center, text width=2.1cm] at (\lx+4.5,\y+0.12) {\chk};
-  \node[cell, anchor=center, text=bad, font=\tiny\itshape] at (\lx+4.5,\y-0.45) {otherwise abort};
+  \node[cell, anchor=center, text=bad, font=\tiny\itshape] at (\lx+4.5,\y-0.45) {derivative stable $\cdot$ otherwise abort};
   \draw[line width=0.5pt, draw=black!40] (\lx+5.65,\y-0.47) -- (\lx+5.65,\y+0.47);
   \node[cell, anchor=center, text width=1.95cm, font=\footnotesize] at (\lx+6.68,\y) {\adj};
   \draw[flow] (ana.east) to[out=0, in=180] (\lx-0.02,\y);

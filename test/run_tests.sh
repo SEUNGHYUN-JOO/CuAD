@@ -56,20 +56,14 @@ test/out/verify_carried || fail=1
 echo
 echo "=== CONVERGENCE LOOPS (Newton, fixed point, 2-D Newton, bisection): implicit adjoint vs FD, ASan ==="
 "$CUAD" -r test/reverse_only/bracketing.cu > test/out/bracketing_b.cuh
-if "$CUAD" test/reverse_only/bracketing.cu > /dev/null 2> test/out/bracketing_fwd.err; then
-  echo "  [FAIL] forward mode accepted a bracketing loop"; fail=1
-else
-  n=$(grep -c "error: cuad (forward mode) cannot differentiate a loop that exits with" test/out/bracketing_fwd.err || true)
-  ok=FAIL; [ "$n" -eq 2 ] && ok=PASS
-  echo "  forward mode rejects the bracketing loops: $n located errors (expected 2)  [$ok]"
-  [ "$ok" = PASS ] || fail=1
-fi
+"$CUAD" test/reverse_only/bracketing.cu > test/out/bracketing_d.cuh || fail=1   # implicit tangents of bracketing loops
 g++ -O1 -g -std=c++17 -fsanitize=address -fno-omit-frame-pointer -Itest test/verify_convergence.cpp -o test/out/verify_convergence
 test/out/verify_convergence || fail=1
 
 echo
-echo "=== MULTI-STATE ROOT FINDERS (secant, Illinois, Brent): residual found in the loop, adjoint vs exact ==="
+echo "=== MULTI-STATE ROOT FINDERS (secant, Illinois, Brent): residual found in the loop, adjoint and tangent vs exact ==="
 "$CUAD" -r test/reverse_only/rootfinders.cu > test/out/rootfinders_b.cuh
+"$CUAD" test/reverse_only/rootfinders.cu > test/out/rootfinders_d.cuh || fail=1
 g++ -O2 -std=c++17 -Itest test/verify_rootfinders.cpp -o test/out/verify_rootfinders
 test/out/verify_rootfinders || fail=1
 
@@ -78,6 +72,13 @@ echo "=== RESIDUAL CHOICE: ambiguous candidates and accidental zeros trap, algeb
 "$CUAD" -r test/reverse_only/residual_choice.cu > test/out/residual_choice_b.cuh
 g++ -O2 -std=c++17 -Itest test/verify_residual_choice.cpp -o test/out/verify_residual_choice
 test/out/verify_residual_choice || fail=1
+
+echo
+echo "=== CONVERGENCE LOOPS, EXTENDED: slow contractions, double roots, while/do loops, pure calls, systems (both modes) ==="
+"$CUAD" -r test/reverse_only/solve_ext.cu > test/out/solve_ext_b.cuh
+"$CUAD" test/reverse_only/solve_ext.cu > test/out/solve_ext_d.cuh
+g++ -O2 -std=c++17 -DWITH_TANGENT -Itest test/verify_solve_ext.cpp -o test/out/verify_solve_ext
+test/out/verify_solve_ext || fail=1
 
 echo
 echo "=== CONVERGENCE-LOOP POLICY: loops that stop away from a fixed point trap; non-solve loops are rejected ==="

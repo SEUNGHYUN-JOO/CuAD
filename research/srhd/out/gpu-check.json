@@ -4,13 +4,13 @@
       "c2p": "newton",
       "J_gpu": 0.12393945659425233,
       "J_host": 0.12393945659425233,
-      "max_rel_grad_diff": 1.0050895978449368e-14
+      "max_rel_grad_diff": 8.128869431381321e-15
     },
     {
       "c2p": "bisection",
       "J_gpu": 0.12393945659425193,
       "J_host": 0.12393945659425193,
-      "max_rel_grad_diff": 6.354336274901332e-15
+      "max_rel_grad_diff": 8.57282304044158e-15
     }
   ],
   "timing": [
@@ -18,49 +18,49 @@
       "n": 256,
       "steps": 256,
       "c2p": "newton",
-      "forward_ms": 24.682239532470703,
-      "reverse_ms": 68.70166778564453,
-      "reverse_over_forward": 2.794233220371046
+      "forward_ms": 24.525728225708008,
+      "reverse_ms": 65.49606323242188,
+      "reverse_over_forward": 2.670504322223082
     },
     {
       "n": 256,
       "steps": 256,
       "c2p": "bisection",
-      "forward_ms": 100.83372497558594,
-      "reverse_ms": 223.32467651367188,
-      "reverse_over_forward": 2.2169998395849992
+      "forward_ms": 100.64431762695312,
+      "reverse_ms": 231.58950805664062,
+      "reverse_over_forward": 2.2957641777165523
     },
     {
       "n": 1024,
       "steps": 1024,
       "c2p": "newton",
-      "forward_ms": 98.69219207763672,
-      "reverse_ms": 288.98358154296875,
-      "reverse_over_forward": 2.992441434768071
+      "forward_ms": 97.37004852294922,
+      "reverse_ms": 275.0419921875,
+      "reverse_over_forward": 2.8247083816814076
     },
     {
       "n": 1024,
       "steps": 1024,
       "c2p": "bisection",
-      "forward_ms": 413.8550109863281,
-      "reverse_ms": 921.2091674804688,
-      "reverse_over_forward": 2.2259224680763894
+      "forward_ms": 414.19415283203125,
+      "reverse_ms": 958.1576538085938,
+      "reverse_over_forward": 2.3144790144184855
     },
     {
       "n": 4096,
       "steps": 4096,
       "c2p": "newton",
-      "forward_ms": 405.1900939941406,
-      "reverse_ms": 1210.555908203125,
-      "reverse_over_forward": 2.9876246387717234
+      "forward_ms": 384.5622863769531,
+      "reverse_ms": 1154.978515625,
+      "reverse_over_forward": 3.0033587705812486
     },
     {
       "n": 4096,
       "steps": 4096,
       "c2p": "bisection",
-      "forward_ms": 1664.756591796875,
-      "reverse_ms": 3738.741455078125,
-      "reverse_over_forward": 2.2434679900974404
+      "forward_ms": 1666.5872802734375,
+      "reverse_ms": 3886.37890625,
+      "reverse_over_forward": 2.338115958599493
     }
   ]
 }

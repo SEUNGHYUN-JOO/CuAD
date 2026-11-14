@@ -1,6 +1,6 @@
 // Derivative error versus iteration count K for three strategies on t^3 + a t - b = 0 (a = 2, b = 5):
-// CuAD implicit adjoint (reverse mode), CuAD tangent of the iterations (forward mode; not for bisection, which
-// forward mode rejects) and Enzyme v0.0.307 reverse mode of the iterations. Reference: the exact root (Cardano)
+// CuAD implicit adjoint (reverse mode), CuAD implicit tangent (forward mode) and Enzyme v0.0.307 reverse mode of the
+// iterations. Reference: the exact root (Cardano)
 // and dt/da = -t/(3t^2 + a), dt/db = 1/(3t^2 + a). Prints JSON lines.
 #include <cmath>
 #include <cstdio>
@@ -42,24 +42,23 @@ int main() {
         else if (s == 1) fixed_point_K_b(x, gx, &yy, &yb, K, t0, t0b);
         else bisect_K_b(x, gx, &yy, &yb, K, t0, t0b);
         double e_imp = std::fmax(std::fabs(gx[0] - ga) / std::fabs(ga), std::fabs(gx[1] - gb) / std::fabs(gb));
-        // CuAD tangent (smooth loops only)
-        double e_tan = -1;
-        if (s < 2) {
-          double g2[2];
-          for (int k = 0; k < 2; ++k) {
-            double xd[2] = {0, 0}, yd = 0, y2 = 0;
-            xd[k] = 1;
-            if (s == 0) newton_K_d(x, xd, &y2, &yd, K, t0, 0.0); else fixed_point_K_d(x, xd, &y2, &yd, K, t0, 0.0);
-            g2[k] = yd;
-          }
-          e_tan = std::fmax(std::fabs(g2[0] - ga) / std::fabs(ga), std::fabs(g2[1] - gb) / std::fabs(gb));
+        // CuAD implicit tangent
+        double g2[2];
+        for (int k = 0; k < 2; ++k) {
+          double xd[2] = {0, 0}, yd = 0, y2 = 0;
+          xd[k] = 1;
+          if (s == 0) newton_K_d(x, xd, &y2, &yd, K, t0, 0.0);
+          else if (s == 1) fixed_point_K_d(x, xd, &y2, &yd, K, t0, 0.0);
+          else bisect_K_d(x, xd, &y2, &yd, K, t0, 0.0);
+          g2[k] = yd;
         }
+        double e_tan = std::fmax(std::fabs(g2[0] - ga) / std::fabs(ga), std::fabs(g2[1] - gb) / std::fabs(gb));
         // Enzyme
         double ge[2] = {0, 0};
         if (s == 0) ENZ(newton_K, x, ge, K, t0); else if (s == 1) ENZ(fixed_point_K, x, ge, K, t0); else ENZ(bisect_K, x, ge, K, t0);
         double e_enz = std::fmax(std::fabs(ge[0] - ga) / std::fabs(ga), std::fabs(ge[1] - gb) / std::fabs(gb));
         std::printf("{\"t0\": %g, \"K\": %d, \"solver\": \"%s\", \"value_error\": %.3e, \"cuad_implicit\": %.3e, "
-                    "\"cuad_tangent_unrolled\": %.3e, \"enzyme_unrolled\": %.3e}\n",
+                    "\"cuad_implicit_tangent\": %.3e, \"enzyme_unrolled\": %.3e}\n",
                     t0, K, names[s], val, e_imp, e_tan, e_enz);
       }
     }

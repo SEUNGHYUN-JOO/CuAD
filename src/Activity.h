@@ -95,6 +95,17 @@ class Activity {
         return true;
     return false;
   }
+  static bool readsFloat(const Stmt *s) {
+    if (!s)
+      return false;
+    if (const auto *d = dyn_cast<DeclRefExpr>(s))
+      if (d->getDecl()->getType()->isRealFloatingType())
+        return true;
+    for (const Stmt *c : s->children())
+      if (readsFloat(c))
+        return true;
+    return false;
+  }
   void assignedScalars(const Stmt *s, std::set<const ValueDecl *> &out) const {
     if (!s)
       return;
@@ -114,16 +125,30 @@ class Activity {
     // Control dependence of a loop that runs to convergence (it leaves with `break` under a branch that
     // reads a varied value, e.g. a bisection): what it refines converges to a function of the inputs even
     // when every assignment copies values computed from constants.
-    if (const auto *fs = dyn_cast<ForStmt>(s))
-      if (exitsWithBreak(fs->getBody()) && branchVaried(fs->getBody())) {
+    // The same holds for a `while` or `do` loop, and for a `for` loop whose condition tests a floating value.
+    {
+      const Stmt *body = nullptr;
+      bool conv = false;
+      if (const auto *fs = dyn_cast<ForStmt>(s)) {
+        body = fs->getBody();
+        conv = exitsWithBreak(body) || (fs->getCond() && readsFloat(fs->getCond()));
+      } else if (const auto *ws = dyn_cast<WhileStmt>(s)) {
+        body = ws->getBody();
+        conv = true;
+      } else if (const auto *dw = dyn_cast<DoStmt>(s)) {
+        body = dw->getBody();
+        conv = true;
+      }
+      if (conv && branchVaried(body)) {
         std::set<const ValueDecl *> as;
-        assignedScalars(fs->getBody(), as);
+        assignedScalars(body, as);
         for (const ValueDecl *v : as)
           if (!varied_.count(v)) {
             varied_.insert(v);
             changed = true;
           }
       }
+    }
     if (const auto *ds = dyn_cast<DeclStmt>(s)) {
       for (const Decl *d : ds->decls())
         if (const auto *vd = dyn_cast<VarDecl>(d))
