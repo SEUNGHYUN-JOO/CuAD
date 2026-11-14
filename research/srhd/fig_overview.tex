@@ -84,14 +84,14 @@
   9.1/cI/I/smooth update/{$x\leftarrow G(x,\theta)$}/{Newton $\cdot$ fixed point}/{distance to the\\ fixed point below $\epsilon_s$}/{$(I-G_x)^{\!\top}\lambda=\bar x$\\[1pt] $\bar\theta\mathrel{+}=G_\theta^{\!\top}\lambda$},
   7.6/cII/II/bracketing/{branch on $r(m,\theta)$}/{bisection}/{bounds collapsed\\ and $r(m)=0$}/{$\bar\theta\mathrel{-}=r_\theta\,s/r_m$},
   6.1/cIII/III/several states/{residual $R(t,\theta)$ found}/{secant $\cdot$ Illinois $\cdot$ Brent}/{residual vanishes\\ candidates agree}/{$\bar\theta\mathrel{-}=R_\theta\,s/R_t$}} {
-  \draw[lane, draw=black, fill=white] (\lx,\y-0.65) rectangle ++(\lw,1.3);
+  \draw[lane, draw=black, fill=white] (\lx,\y-0.7) rectangle ++(\lw,1.4);
   \node[badge, fill=\c] at (\lx+0.43,\y) {\n};
   \node[cell, anchor=west, text width=2.45cm] at (\lx+0.85,\y)
     {\textbf{\title}\\[1pt] \rel\\[1pt] {\color{muted}\itshape\tiny \ex}};
-  \draw[line width=0.5pt, draw=black!40] (\lx+3.38,\y-0.47) -- (\lx+3.38,\y+0.47);
-  \node[cell, anchor=center, text width=2.1cm] at (\lx+4.5,\y+0.12) {\chk};
-  \node[cell, anchor=center, text=bad, font=\tiny\itshape] at (\lx+4.5,\y-0.45) {derivative stable $\cdot$ otherwise abort};
-  \draw[line width=0.5pt, draw=black!40] (\lx+5.65,\y-0.47) -- (\lx+5.65,\y+0.47);
+  \draw[line width=0.5pt, draw=black!40] (\lx+3.38,\y-0.55) -- (\lx+3.38,\y+0.55);
+  \node[cell, anchor=center, text width=2.1cm] at (\lx+4.5,\y+0.1) {\chk\\ derivative stable};
+  \node[cell, anchor=center, text=bad, font=\tiny\itshape] at (\lx+4.5,\y-0.53) {otherwise abort};
+  \draw[line width=0.5pt, draw=black!40] (\lx+5.65,\y-0.55) -- (\lx+5.65,\y+0.55);
   \node[cell, anchor=center, text width=1.95cm, font=\footnotesize] at (\lx+6.68,\y) {\adj};
   \draw[flow] (ana.east) to[out=0, in=180] (\lx-0.02,\y);
 }
