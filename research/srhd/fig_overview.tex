@@ -67,7 +67,7 @@
 \node[chip, below=0.15cm of k2] (k3) {does the update of $x$\\ depend on $p$?};
 \node[chip, draw=bad!50, fill=bad!7, below=0.36cm of k3] (rej)
   {memory write $\cdot$ nested loop $\cdot$ call\\ $\Rightarrow$ rejected with the reason};
-\draw[flow] (code.east |- k2.west) -- (ana.west |- k2.west);
+\draw[flow] (code.east) -- (ana.west);
 \draw[->, line width=0.6pt, draw=bad!70] (k3.south) -- (rej.north);
 
 % three lanes: class | run-time check | implicit adjoint
