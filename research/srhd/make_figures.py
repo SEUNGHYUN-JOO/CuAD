@@ -143,7 +143,8 @@ if __name__ == '__main__' or __name__ == 'make_figures':
         snap(ax, 'x', (0, 60 if s != 'newton' else 12))
     snap(axs, 'y', (1e-17, max(ax.dataLim.intervaly[1] for ax in axs)))
     axs[0].set_ylabel('relative error of $dt/d(a,b)$')
-    note(axs[2], (44, 1.0), (31, 1e-4), 'differentiated bisection:\nerror 1 for every $K$', color=C['enzyme'])
+    note(axs[2], (44, 1.0), (58, 1e-4), 'differentiated bisection:\nerror 1 for every $K$', color=C['enzyme'],
+         ha='right')
     note(axs[0], (3, 4e-12), (5.2, 1e-8), 'implicit error\n' r'$\approx$ (value error)$^2$', color=C['cuad'])
     top_legend(fig, axs, 4)
     save(fig, 'fig_iteration_sweep.pdf')
