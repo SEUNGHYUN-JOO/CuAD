@@ -7,7 +7,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FixedLocator, LogLocator, MaxNLocator, NullFormatter
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 import numpy as np
 
 out = Path(__file__).parent / 'out'
@@ -223,16 +223,16 @@ if __name__ == '__main__' or __name__ == 'make_figures':
             title(ax, letter, ttl); ax.set_xlabel('$x$'); ax.set_ylabel(r'$\rho$')
             snap(ax, 'x', (0, 1)); snap(ax, 'y', (0, 1.05 * float(np.max(z['exact'][:, 0]))))
             if name == 'MM2':   # the thin shell, magnified
-                ins = inset_axes(ax, width='34%', height='48%', loc='upper left', borderpad=1.9,
+                ins = inset_axes(ax, width='34%', height='52%', loc='upper left', borderpad=1.2,
                                  bbox_to_anchor=(0.2, 0, 1, 1), bbox_transform=ax.transAxes)
                 ins.plot(z['x'], z['exact'][:, 0], '-', color=INK, lw=0.9)
                 ins.plot(z['x'], z['P'][:n], '-', color=C['cuad'], lw=1.2)
-                ins.set_xlim(0.875, 0.905); ins.set_ylim(0, 12); ins.set_xticks([0.88, 0.9]); ins.set_yticks([0, 5, 10])
+                ins.set_xlim(0.875, 0.905); ins.set_ylim(0, 11.5); ins.set_xticks([0.88, 0.9]); ins.set_yticks([0, 5, 10])
                 ins.tick_params(labelsize=6); ins.grid(False)
                 for s in ('top', 'right'):
                     ins.spines[s].set_visible(True)
-                ins.set_title('thin shell', fontsize=6.5, loc='center', pad=2, color=MUTED)
-                ax.add_patch(plt.Rectangle((0.875, 0), 0.03, 11.4, fc='none', ec=MUTED, lw=0.6, ls='--'))
+                # the magnified region as a dashed box joined to the inset by dashed lines
+                mark_inset(ax, ins, loc1=1, loc2=4, fc='none', ec=MUTED, lw=0.6, ls='--')
     top_legend(fig, axs, 2)
     save(fig, 'fig_riemann.pdf')
 
