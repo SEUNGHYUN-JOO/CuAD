@@ -2,6 +2,7 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2610.26694-b31b1b?logo=arxiv)](https://arxiv.org/abs/2610.26694)
 [![Release](https://img.shields.io/github/v/release/SEUNGHYUN-JOO/CuAD)](https://github.com/SEUNGHYUN-JOO/CuAD/releases)
+[![DOI](https://zenodo.org/badge/1424368708.svg)](https://doi.org/10.5281/zenodo.24212012)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
 **CuAD** (CUDA Automatic Differentiation) reads CUDA kernels and writes their derivatives as new CUDA source, in the
