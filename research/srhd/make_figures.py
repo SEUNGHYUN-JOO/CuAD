@@ -248,9 +248,9 @@ if __name__ == '__main__' or __name__ == 'make_figures':
     ref = st['taylor_2d'][0]['remainder'][0] * (h / h[0]) ** 2
     ax.loglog(h, ref, '-', color=MUTED, lw=0.6, zorder=1)
     snap(ax, 'x'); snap(ax, 'y')
-    ax.text(3e-4, 2.2e-12, 'second order\n' r'$|J(W_0{+}hd)-J-h\nabla J\cdot d|$', fontsize=6.6, color=INK, ha='left')
-    ax.text(1.3e-6, 5e-7, 'first order\n' r'$|J(W_0{+}hd)-J|$', fontsize=6.6, color=MUTED, ha='left')
-    ax.set_xlabel('$h$'); ax.set_ylabel('remainder'); ax.legend(loc='lower right')
+    ax.text(3e-4, 2.2e-12, 'second order\n' r'$|J(U_0{+}\eta v)-J-\eta\nabla J\cdot v|$', fontsize=6.6, color=INK, ha='left')
+    ax.text(1.3e-6, 5e-7, 'first order\n' r'$|J(U_0{+}\eta v)-J|$', fontsize=6.6, color=MUTED, ha='left')
+    ax.set_xlabel(r'$\eta$'); ax.set_ylabel('remainder'); ax.legend(loc='lower right')
     save(fig, 'fig_taylor.pdf')
 
     # Fig. 8: 1-D medium reconstruction, exact gradient against differentiated bisection (inverse_density.py)

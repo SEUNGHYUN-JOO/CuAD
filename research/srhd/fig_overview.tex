@@ -71,8 +71,8 @@
 \node[card, minimum width=3.5cm, minimum height=4.3cm, anchor=north west] (ana) at (5.15,9.75) {};
 \node[head, anchor=north west, minimum width=3.5cm] at (ana.north west) {static analysis};
 \node[chip, anchor=north] (k1) at ($(ana.north)+(0,-0.78)$) {state\enspace $x$};
-\node[chip, below=0.15cm of k1] (k2) {parameters\enspace $p=(U,\,x_{\min})$};
-\node[chip, below=0.15cm of k2] (k3) {does the update of $x$\\ depend on $p$?};
+\node[chip, below=0.15cm of k1] (k2) {parameters\enspace $\theta=(U,\,x_{\min})$};
+\node[chip, below=0.15cm of k2] (k3) {does the update of $x$\\ depend on $\theta$?};
 \node[chip, draw=black, fill=white, below=0.36cm of k3, text width=2.9cm] (rej)
   {memory write $\cdot$ call\\ nested loop\\ $\Rightarrow$ rejected with the reason};
 \draw[flow] (code.east) -- (ana.west);
@@ -81,9 +81,9 @@
 % three lanes: class | run-time check | implicit adjoint
 \def\lx{9.3} \def\lw{7.7}
 \foreach \y/\c/\n/\title/\rel/\ex/\chk/\adj in {
-  9.1/cI/I/smooth update/{$x\leftarrow G(x,p)$}/{Newton $\cdot$ fixed point}/{distance to the\\ fixed point below $\epsilon_s$}/{$(I-G_x)^{\!\top}\lambda=\bar x$\\[1pt] $\bar p\mathrel{+}=G_p^{\!\top}\lambda$},
-  7.6/cII/II/bracketing/{branch on $r(m,p)$}/{bisection}/{bounds collapsed\\ and $r(m)=0$}/{$\bar p\mathrel{-}=r_p\,s/r_m$},
-  6.1/cIII/III/several states/{residual $R(t,p)$ found}/{secant $\cdot$ Illinois $\cdot$ Brent}/{residual vanishes\\ candidates agree}/{$\bar p\mathrel{-}=R_p\,s/R_t$}} {
+  9.1/cI/I/smooth update/{$x\leftarrow G(x,\theta)$}/{Newton $\cdot$ fixed point}/{distance to the\\ fixed point below $\epsilon_s$}/{$(I-G_x)^{\!\top}\lambda=\bar x$\\[1pt] $\bar\theta\mathrel{+}=G_\theta^{\!\top}\lambda$},
+  7.6/cII/II/bracketing/{branch on $r(m,\theta)$}/{bisection}/{bounds collapsed\\ and $r(m)=0$}/{$\bar\theta\mathrel{-}=r_\theta\,s/r_m$},
+  6.1/cIII/III/several states/{residual $R(t,\theta)$ found}/{secant $\cdot$ Illinois $\cdot$ Brent}/{residual vanishes\\ candidates agree}/{$\bar\theta\mathrel{-}=R_\theta\,s/R_t$}} {
   \draw[lane, draw=black, fill=white] (\lx,\y-0.65) rectangle ++(\lw,1.3);
   \node[badge, fill=\c] at (\lx+0.43,\y) {\n};
   \node[cell, anchor=west, text width=2.45cm] at (\lx+0.85,\y)
