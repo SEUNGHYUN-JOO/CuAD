@@ -65,18 +65,18 @@ nvidia-smi --query-gpu=name,driver_version,utilization.gpu,memory.used --format=
 step "verification (Sec. VI)"
 $O/tolerance_sweep > $O/tolerance-sweep.jsonl || die tolerance_sweep            # Fig. 3
 $PY $S/c2p_robustness.py || die robustness                                     # Fig. 4
-$PY $S/compare_c2p_variants.py || die variants                                 # Table II
+$PY $S/compare_c2p_variants.py || die variants                                 # Table I
 $PY $S/check_adjoint.py > /dev/null || die check_adjoint                       # C2P kernel and trajectory vs FD
 $PY $S/check_enzyme_host.py > /dev/null || die enzyme_host
 [ -n "$CLADINC" ] && { $PY $S/check_clad_host.py > /dev/null; $O/clad_newton_min > $O/clad-newton-min.txt; }
 $PY $S/check_cooling.py || die cooling
-$PY $S/check_reliability.py > /dev/null || die reliability                     # Table IV
+$PY $S/check_reliability.py > /dev/null || die reliability                     # Table III
 $O/dot2d > $O/dot2d.txt || die dot2d
 
 step "performance (Sec. VII)"
-$PY $S/compare_c2p_gpu.py || die compare_gpu                                   # Fig. 5, Table VI
+$PY $S/compare_c2p_gpu.py || die compare_gpu                                   # Fig. 5, Table V
 $PY $S/c2p_enzyme_heap.py || die heap
-$PY $S/c2p_gpu_ablation.py > /dev/null || die ablation                         # Table VII
+$PY $S/c2p_gpu_ablation.py > /dev/null || die ablation                         # Table VI
 [ -x "$JAXPY" ] && $JAXPY $S/jax_c2p_baseline.py
 
 step "application (Sec. VIII)"
@@ -84,7 +84,7 @@ $PY $S/check_primal.py || die primal                                           #
 $PY $S/check_gpu.py || die check_gpu
 $PY $S/smooth_and_taylor.py || die taylor                                      # Fig. 7
 $PY $S/check2d.py || die check2d
-bash $S/run_reproduction.sh || die reproduction                                # Table IX, Fig. 8
+bash $S/run_reproduction.sh || die reproduction                                # Table VIII, Fig. 8
 $PY $S/inverse_density.py 512 1 cuad 0.01 1e-6 0 > /dev/null || die inverse_noise
 $PY $S/inverse_density.py 512 1 enzyme 0.01 1e-6 0 > /dev/null || die inverse_noise_enzyme
 $PY $S/inverse_density2d.py 64 1 0 || die inverse2d                            # Fig. 9
